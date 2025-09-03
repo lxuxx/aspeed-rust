@@ -7,7 +7,11 @@ pub mod hmac_test;
 pub mod i2c_core_test;
 pub mod i2c_master_slave_test;
 pub mod i2c_test;
+<<<<<<< HEAD
 pub mod i3c_test;
+=======
+pub mod i2cmonitor_test;
+>>>>>>> bddc34d (Add i2c filter driver and test.)
 pub mod rsa_test;
 pub mod rsa_test_vec;
 pub mod spim_test;
