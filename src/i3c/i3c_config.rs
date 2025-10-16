@@ -5,7 +5,6 @@ use core::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use embedded_hal::delay::DelayNs;
 use heapless::Vec;
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum I3cConfigError {
     AddrInUse,
@@ -151,7 +150,9 @@ impl Attached {
 
     pub fn attach(&mut self, dev: DeviceEntry) -> Result<usize, I3cConfigError> {
         let idx = self.devices.len();
-        self.devices.push(dev).map_err(|_| I3cConfigError::NoFreeSlot)?;
+        self.devices
+            .push(dev)
+            .map_err(|_| I3cConfigError::NoFreeSlot)?;
         Ok(idx)
     }
 

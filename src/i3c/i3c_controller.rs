@@ -34,7 +34,12 @@ impl<H: HardwareInterface, L: Logger> I3cController<H, L> {
         ctrl.hw.i3c_aspeed_isr(&mut ctrl.config);
     }
 
-    pub fn attach_i3c_dev(&mut self, pid: u64, desired_da: u8, slot: u8) -> Result<(), AttachError> {
+    pub fn attach_i3c_dev(
+        &mut self,
+        pid: u64,
+        desired_da: u8,
+        slot: u8,
+    ) -> Result<(), AttachError> {
         if desired_da == 0 || desired_da >= I3C_BROADCAST_ADDR {
             return Err(AttachError::OutOfRange);
         }
@@ -61,14 +66,15 @@ impl<H: HardwareInterface, L: Logger> I3cController<H, L> {
             .attached
             .attach(dev)
             .map_err(|_| AttachError::AddrInUse)?;
-        self.config.attached.map_pos(slot, u8::try_from(idx).map_err(|_| AttachError::OutOfRange)?);
+        self.config.attached.map_pos(
+            slot,
+            u8::try_from(idx).map_err(|_| AttachError::OutOfRange)?,
+        );
         self.config.addrbook.mark_use(desired_da, true);
         let rc = self.hw.attach_i3c_dev(slot.into(), desired_da);
         match rc {
             Ok(()) => Ok(()),
-            Err(_) => {
-                Err(AttachError::AddrInUse)
-            }
+            Err(_) => Err(AttachError::AddrInUse),
         }
     }
 

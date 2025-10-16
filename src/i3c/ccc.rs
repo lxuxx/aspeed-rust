@@ -130,7 +130,12 @@ const fn i3c_ccc_rstact(broadcast: bool) -> u8 {
     }
 }
 
-pub fn ccc_events_all_set<H>(hw: &mut H, config: &mut I3cConfig, enable: bool, events: u8) -> Result<(), CccError>
+pub fn ccc_events_all_set<H>(
+    hw: &mut H,
+    config: &mut I3cConfig,
+    enable: bool,
+    events: u8,
+) -> Result<(), CccError>
 where
     H: HardwareInterface,
 {
@@ -157,7 +162,13 @@ where
     }
 }
 
-pub fn ccc_events_set<H>( hw: &mut H, config: &mut I3cConfig, da: u8, enable: bool, events: u8,) -> Result<(), CccError>
+pub fn ccc_events_set<H>(
+    hw: &mut H,
+    config: &mut I3cConfig,
+    da: u8,
+    enable: bool,
+    events: u8,
+) -> Result<(), CccError>
 where
     H: HardwareInterface,
 {
@@ -197,7 +208,11 @@ where
     }
 }
 
-pub fn ccc_rstact_all<H>(hw: &mut H, config: &mut I3cConfig, action: CccRstActDefByte) -> Result<(), CccError>
+pub fn ccc_rstact_all<H>(
+    hw: &mut H,
+    config: &mut I3cConfig,
+    action: CccRstActDefByte,
+) -> Result<(), CccError>
 where
     H: HardwareInterface,
 {
@@ -254,7 +269,12 @@ where
     }
 }
 
-pub fn ccc_setnewda<H>(hw: &mut H, config: &mut I3cConfig, curr_da: u8, new_da: u8) -> Result<(), CccError>
+pub fn ccc_setnewda<H>(
+    hw: &mut H,
+    config: &mut I3cConfig,
+    curr_da: u8,
+    new_da: u8,
+) -> Result<(), CccError>
 where
     H: HardwareInterface,
 {
@@ -290,8 +310,8 @@ where
 
     let rc = hw.do_ccc(config, &mut payload);
     match rc {
-        Ok(()) =>  Ok(()),
-            _ => Err(CccError::Invalid),
+        Ok(()) => Ok(()),
+        _ => Err(CccError::Invalid),
     }
 }
 
@@ -388,7 +408,6 @@ where
 
         _ => Err(CccError::Invalid),
     }
-
 }
 
 pub fn ccc_getstatus_fmt1<H>(hw: &mut H, config: &mut I3cConfig, da: u8) -> Result<u16, CccError>

@@ -108,20 +108,20 @@ pub const RESET_CTRL_CMD_QUEUE: u32 = bit(1);
 pub const RESET_CTRL_SOFT: u32 = bit(0);
 
 pub const RESET_CTRL_ALL: u32 = RESET_CTRL_IBI_QUEUE
-| RESET_CTRL_RX_FIFO
-| RESET_CTRL_TX_FIFO
-| RESET_CTRL_RESP_QUEUE
-| RESET_CTRL_CMD_QUEUE
-| RESET_CTRL_SOFT;
+    | RESET_CTRL_RX_FIFO
+    | RESET_CTRL_TX_FIFO
+    | RESET_CTRL_RESP_QUEUE
+    | RESET_CTRL_CMD_QUEUE
+    | RESET_CTRL_SOFT;
 
 pub const RESET_CTRL_QUEUES: u32 = RESET_CTRL_IBI_QUEUE
-| RESET_CTRL_RX_FIFO
-| RESET_CTRL_TX_FIFO
-| RESET_CTRL_RESP_QUEUE
-| RESET_CTRL_CMD_QUEUE;
+    | RESET_CTRL_RX_FIFO
+    | RESET_CTRL_TX_FIFO
+    | RESET_CTRL_RESP_QUEUE
+    | RESET_CTRL_CMD_QUEUE;
 
 pub const RESET_CTRL_XFER_QUEUES: u32 =
-RESET_CTRL_RX_FIFO | RESET_CTRL_TX_FIFO | RESET_CTRL_RESP_QUEUE | RESET_CTRL_CMD_QUEUE;
+    RESET_CTRL_RX_FIFO | RESET_CTRL_TX_FIFO | RESET_CTRL_RESP_QUEUE | RESET_CTRL_CMD_QUEUE;
 
 pub const RESPONSE_QUEUE_PORT: u32 = 0x10;
 pub const RESPONSE_PORT_ERR_STATUS_SHIFT: u32 = 28;
@@ -369,8 +369,9 @@ impl<'a> I3cIbi<'a> {
     #[inline]
     #[must_use]
     pub fn payload_len(&self) -> u8 {
-        self.payload
-            .map_or(0, |p| u8::try_from(p.len().min(u8::MAX as usize)).unwrap_or(u8::MAX))
+        self.payload.map_or(0, |p| {
+            u8::try_from(p.len().min(u8::MAX as usize)).unwrap_or(u8::MAX)
+        })
     }
 
     #[must_use]
@@ -862,10 +863,10 @@ impl<I3C: Instance, L: Logger> HardwareInterface for Ast1060I3c<I3C, L> {
             self.i3c
                 .i3cd004()
                 .write(|w| unsafe { w.dev_static_addr().bits(9).static_addr_valid().set_bit() });
-            } else {
-                self.i3c
-                    .i3cd004()
-                    .write(|w| unsafe { w.dev_dynamic_addr().bits(8).dynamic_addr_valid().set_bit() });
+        } else {
+            self.i3c
+                .i3cd004()
+                .write(|w| unsafe { w.dev_dynamic_addr().bits(8).dynamic_addr_valid().set_bit() });
         }
 
         self.i3c_enable(config);
@@ -984,10 +985,10 @@ impl<I3C: Instance, L: Logger> HardwareInterface for Ast1060I3c<I3C, L> {
             self.i3c
                 .i3cd0b0()
                 .modify(|_, w| unsafe { w.dev_op_mode().bits(1) });
-            } else {
-                self.i3c
-                    .i3cd0b0()
-                    .modify(|_, w| unsafe { w.dev_op_mode().bits(0) });
+        } else {
+            self.i3c
+                .i3cd0b0()
+                .modify(|_, w| unsafe { w.dev_op_mode().bits(0) });
         }
     }
 
@@ -1026,9 +1027,12 @@ impl<I3C: Instance, L: Logger> HardwareInterface for Ast1060I3c<I3C, L> {
         // I3C PP
         let hcnt = config.i3c_pp_scl_hi_period_ns.div_ceil(config.core_period);
         let lcnt = config.i3c_pp_scl_lo_period_ns.div_ceil(config.core_period);
-        self.i3c
-            .i3cd0b8()
-            .write(|w| unsafe { w.i3cpphcnt().bits(u8::try_from(hcnt).unwrap_or(u8::MAX)).i3cpplcnt().bits(u8::try_from(lcnt).unwrap_or(u8::MAX)) });
+        self.i3c.i3cd0b8().write(|w| unsafe {
+            w.i3cpphcnt()
+                .bits(u8::try_from(hcnt).unwrap_or(u8::MAX))
+                .i3cpplcnt()
+                .bits(u8::try_from(lcnt).unwrap_or(u8::MAX))
+        });
 
         // SDA TX hold time
         let mut lcnt: u32 = (config.sda_tx_hold_ns)
@@ -1182,7 +1186,11 @@ impl<I3C: Instance, L: Logger> HardwareInterface for Ast1060I3c<I3C, L> {
     fn i3c_bus_init(&mut self, config: &mut I3cConfig) {
         i3c_debug!(self.logger, "i3c bus init");
         let rc = ccc_rstact_all(self, config, CccRstActDefByte::CccRstActResetWholeTarget);
-        if let Ok(()) = rc {} else { let _ = ccc_rstact_all(self, config, CccRstActDefByte::CccRstActPeriphralOnly); return; }
+        if let Ok(()) = rc {
+        } else {
+            let _ = ccc_rstact_all(self, config, CccRstActDefByte::CccRstActPeriphralOnly);
+            return;
+        }
 
         let _ = ccc_rstdaa_all(self, config);
         let events = I3C_CCC_EVT_ALL;
@@ -1288,7 +1296,7 @@ impl<I3C: Instance, L: Logger> HardwareInterface for Ast1060I3c<I3C, L> {
             self.i3c
                 .i3cd014()
                 .write(|w| unsafe { w.tx_data_port().bits(word) });
-            }
+        }
 
         let rem = chunks.remainder();
         if !rem.is_empty() {
@@ -1536,7 +1544,11 @@ impl<I3C: Instance, L: Logger> HardwareInterface for Ast1060I3c<I3C, L> {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn do_ccc(&mut self, config: &mut I3cConfig, payload: &mut CccPayload<'_, '_>) -> Result<(), I3cDrvError> {
+    fn do_ccc(
+        &mut self,
+        config: &mut I3cConfig,
+        payload: &mut CccPayload<'_, '_>,
+    ) -> Result<(), I3cDrvError> {
         // init i3c_cmd to all 0
         let mut cmds = [I3cCmd {
             cmd_lo: 0,
@@ -1553,7 +1565,9 @@ impl<I3C: Instance, L: Logger> HardwareInterface for Ast1060I3c<I3C, L> {
         let mut is_broadcast = false;
 
         let (id, data_len) = {
-            let Some(ccc) = payload.ccc.as_ref() else { return Err(I3cDrvError::Invalid) };
+            let Some(ccc) = payload.ccc.as_ref() else {
+                return Err(I3cDrvError::Invalid);
+            };
             (ccc.id, ccc.data.as_deref().map_or(0, <[u8]>::len))
         };
 
@@ -1587,9 +1601,9 @@ impl<I3C: Instance, L: Logger> HardwareInterface for Ast1060I3c<I3C, L> {
                     .as_ref()
                     .and_then(|ts| ts.first())
                     .map(|t| t.addr)
-                    else {
-                        return Err(I3cDrvError::Invalid);
-                    };
+                else {
+                    return Err(I3cDrvError::Invalid);
+                };
                 // -------- Direct CCC --------
                 let pos_ops = config.attached.pos_of_addr(tgt_addr);
                 i3c_debug!(
@@ -1609,17 +1623,16 @@ impl<I3C: Instance, L: Logger> HardwareInterface for Ast1060I3c<I3C, L> {
                     pos
                 );
 
-                let Some(tp) = payload.targets.as_deref_mut().and_then(|ts| ts.first_mut())
-                    else {
-                        return Err(I3cDrvError::Invalid);
-                    };
+                let Some(tp) = payload.targets.as_deref_mut().and_then(|ts| ts.first_mut()) else {
+                    return Err(I3cDrvError::Invalid);
+                };
 
                 rnw = tp.rnw;
 
                 if rnw {
                     let len = tp.data.as_deref().map_or(0, <[u8]>::len);
                     if len == 0 {
-                        return Err(I3cDrvError::Invalid)
+                        return Err(I3cDrvError::Invalid);
                     }
                     cmd.rx_len = u32::try_from(len).map_err(|_| I3cDrvError::Invalid)?;
                     cmd.rx = tp.data.as_deref_mut();
@@ -1705,12 +1718,12 @@ impl<I3C: Instance, L: Logger> HardwareInterface for Ast1060I3c<I3C, L> {
                 | field_prep(COMMAND_PORT_DEV_INDEX, pos)
                 | COMMAND_PORT_ROC
                 | COMMAND_PORT_TOC,
-                cmd_hi: field_prep(COMMAND_PORT_ATTR, COMMAND_ATTR_XFER_ARG),
-                tx: None,
-                rx: None,
-                tx_len: 0,
-                rx_len: 0,
-                ret: 0,
+            cmd_hi: field_prep(COMMAND_PORT_ATTR, COMMAND_ATTR_XFER_ARG),
+            tx: None,
+            rx: None,
+            tx_len: 0,
+            rx_len: 0,
+            ret: 0,
         };
 
         i3c_debug!(
@@ -1783,15 +1796,20 @@ impl<I3C: Instance, L: Logger> HardwareInterface for Ast1060I3c<I3C, L> {
             let cmd = &mut cmds[i];
             *cmd = I3cCmd {
                 cmd_hi: field_prep(COMMAND_PORT_ATTR, COMMAND_ATTR_XFER_ARG)
-                    | field_prep(COMMAND_PORT_ARG_DATA_LEN, u32::try_from(len).map_err(|_| I3cDrvError::Invalid)?),
-                    cmd_lo: field_prep(COMMAND_PORT_TID, u32::try_from(i).map_err(|_| I3cDrvError::Invalid)?)
-                        | field_prep(COMMAND_PORT_DEV_INDEX, u32::from(pos))
-                        | COMMAND_PORT_ROC,
-                        tx: None,
-                        rx: None,
-                        tx_len: 0,
-                        rx_len: 0,
-                        ret: 0,
+                    | field_prep(
+                        COMMAND_PORT_ARG_DATA_LEN,
+                        u32::try_from(len).map_err(|_| I3cDrvError::Invalid)?,
+                    ),
+                cmd_lo: field_prep(
+                    COMMAND_PORT_TID,
+                    u32::try_from(i).map_err(|_| I3cDrvError::Invalid)?,
+                ) | field_prep(COMMAND_PORT_DEV_INDEX, u32::from(pos))
+                    | COMMAND_PORT_ROC,
+                tx: None,
+                rx: None,
+                tx_len: 0,
+                rx_len: 0,
+                ret: 0,
             };
 
             if is_read {
@@ -1836,11 +1854,11 @@ impl<I3C: Instance, L: Logger> HardwareInterface for Ast1060I3c<I3C, L> {
                 ret: 0,
             })
             .unwrap();
-            }
+        }
 
         let ret = self.priv_xfer_build_cmds(cmds.as_mut_slice(), msgs, pos);
         match ret {
-            Ok(()) => {},
+            Ok(()) => {}
             Err(e) => return Err(e),
         }
 
@@ -1873,7 +1891,10 @@ impl<I3C: Instance, L: Logger> HardwareInterface for Ast1060I3c<I3C, L> {
     fn target_tx_write(&mut self, buf: &[u8]) {
         self.wr_tx_fifo(buf);
         let cmd = field_prep(COMMAND_PORT_ATTR, COMMAND_ATTR_SLAVE_DATA_CMD)
-            | field_prep(COMMAND_PORT_ARG_DATA_LEN, u32::try_from(buf.len()).map_or(0, |v| v))
+            | field_prep(
+                COMMAND_PORT_ARG_DATA_LEN,
+                u32::try_from(buf.len()).map_or(0, |v| v),
+            )
             | field_prep(COMMAND_PORT_TID, Tid::TargetRdData as u32);
 
         self.i3c.i3cd00c().write(|w| unsafe { w.bits(cmd) });
@@ -2067,7 +2088,8 @@ impl<I3C: Instance, L: Logger> HardwareInterface for Ast1060I3c<I3C, L> {
             }
         }
 
-        let payload_len = u32::try_from(notifier.payload.map_or(0, <[u8]>::len)).map_err(|_| I3cDrvError::Invalid)?;
+        let payload_len = u32::try_from(notifier.payload.map_or(0, <[u8]>::len))
+            .map_err(|_| I3cDrvError::Invalid)?;
         let cmd: u32 = field_prep(COMMAND_PORT_ATTR, COMMAND_ATTR_SLAVE_DATA_CMD)
             | field_prep(COMMAND_PORT_ARG_DATA_LEN, payload_len)
             | field_prep(COMMAND_PORT_TID, Tid::TargetIbi as u32);
@@ -2086,24 +2108,27 @@ impl<I3C: Instance, L: Logger> HardwareInterface for Ast1060I3c<I3C, L> {
 
         let mut delay = DummyDelay {};
 
-        if !config.target_ibi_done.wait_for_us(1_000_000_000, &mut delay) {
+        if !config
+            .target_ibi_done
+            .wait_for_us(1_000_000_000, &mut delay)
+        {
             i3c_debug!(self.logger, "SIR timeout! Reset I3C controller");
             self.enter_halt(false, config);
             self.reset_ctrl(RESET_CTRL_QUEUES);
             self.exit_halt(config);
-            return Err(I3cDrvError::IoError)
+            return Err(I3cDrvError::IoError);
         }
 
         if !config
             .target_data_done
-                .wait_for_us(1_000_000_000, &mut delay)
+            .wait_for_us(1_000_000_000, &mut delay)
         {
             // C: wait master read timeout -> disable/reset/enable queues
             i3c_debug!(self.logger, "wait master read timeout! Reset queues");
             self.i3c_disable(config.is_secondary);
             self.reset_ctrl(RESET_CTRL_QUEUES);
             self.i3c_enable(config);
-            return Err(I3cDrvError::Timeout)
+            return Err(I3cDrvError::Timeout);
         }
 
         Ok(())

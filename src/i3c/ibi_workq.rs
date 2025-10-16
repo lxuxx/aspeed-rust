@@ -103,8 +103,7 @@ pub fn i3c_ibi_work_enqueue_target_irq(bus: usize, addr: u8, data: &[u8]) {
             let _ = p.enqueue(IbiWork::Sirq {
                 addr,
                 // len: take as u8,
-                len: u8::try_from(take).map_err(|_| ())
-                    .unwrap_or(IBI_DATA_MAX),
+                len: u8::try_from(take).map_err(|_| ()).unwrap_or(IBI_DATA_MAX),
                 data: ibi_buf,
             });
         }

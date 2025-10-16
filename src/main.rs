@@ -101,7 +101,6 @@ fn test_wdt(uart: &mut UartController<'_>) {
     }
 }
 
-
 #[cfg(any(feature = "i3c_master", feature = "i3c_target"))]
 fn release_bmc_spi(uart: &mut UartController<'_>) {
     uart.write_all(b"\r\n####### SPIM0 setup #######\r\n")
