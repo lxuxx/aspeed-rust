@@ -3,7 +3,7 @@
 use crate::common::{DummyDelay, NoOpLogger, UartLogger};
 use crate::i3c::ast1060_i3c::HardwareInterface;
 use crate::i3c::ast1060_i3c::I3cMsg;
-use crate::i3c::ast1060_i3c::{Ast1060I3c, I3C_MSG_READ, I3C_MSG_STOP};
+use crate::i3c::ast1060_i3c::{Ast1060I3c, I3C_MSG_READ, I3C_MSG_STOP, I3C_MSG_WRITE};
 use crate::i3c::i3c_config::I3cConfig;
 use crate::i3c::i3c_config::I3cTargetConfig;
 use crate::i3c::i3c_controller::I3cController;
@@ -54,7 +54,7 @@ pub fn test_i3c_master(uart: &mut UartController<'_>) {
         });
     }
 
-    pinctrl::Pinctrl::apply_pinctrl_group(pinctrl::PINCTRL_I3C2);
+    pinctrl::Pinctrl::apply_pinctrl_group(pinctrl::PINCTRL_HVI3C2);
     let hw = Ast1060I3c::<ast1060_pac::I3c2, UartLogger>::new(UartLogger::new(&mut dbg_uart));
 
     let mut ctrl = I3cController {
@@ -77,12 +77,14 @@ pub fn test_i3c_master(uart: &mut UartController<'_>) {
     }
 
     let mut ibi_cons = i3c_ibi_workq_consumer(ctrl.hw.bus_num() as usize);
-    let known_pid = 0x07ec_0503_1000u64;
+    // let known_pid = 0x07ec_0503_1000u64;
+    let known_pid = 0x07ec_a003_2000u64;
     let ctrl_dev_slot0 = 0;
     ctrl.init();
 
     let dyn_addr = if let Some(da) = ctrl.config.addrbook.alloc_from(8) {
         ctrl.attach_i3c_dev(known_pid, da, ctrl_dev_slot0).unwrap();
+        ctrl.hw.ibi_enable(&mut ctrl.config, da).unwrap();
         writeln!(uart, "Pre-attached dev at slot 0, dyn addr {da}\r").unwrap();
         da
     } else {
@@ -93,6 +95,8 @@ pub fn test_i3c_master(uart: &mut UartController<'_>) {
     // Dump I3C2 registers
     // dump_i3c_controller_registers(uart, 0x7e7a_4000);
     writeln!(uart, "ctrl dev at slot 0, dyn addr {dyn_addr}\r").unwrap();
+    let mut received_count = 0;
+
     loop {
         if let Some(work) = ibi_cons.dequeue() {
             match work {
@@ -124,10 +128,37 @@ pub fn test_i3c_master(uart: &mut UartController<'_>) {
                         hdr_cmd_mode: 0,
                     }];
                     let _ = ctrl.hw.priv_xfer(&mut ctrl.config, known_pid, &mut msgs);
-                    writeln!(uart, "  read data:").unwrap();
-                    for i in 0..msgs[0].actual_len {
-                        write!(uart, " {:02x}", rx_buf[i as usize]).unwrap();
+                    let rx_len = msgs[0].actual_len as usize;
+                    writeln!(
+                        uart,
+                        "[MASTER <== TARGET]  MASTER READ: {:02x?}",
+                        &rx_buf[..rx_len]
+                    )
+                    .unwrap();
+                    writeln!(uart, "\r").unwrap();
+                    received_count += 1;
+                    if received_count > 10 {
+                        writeln!(uart, "I3C master test done\r").unwrap();
+                        break;
                     }
+
+                    // send data to target
+                    let mut tx_buf: [u8; 16] = [
+                        0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xba, 0xbe, 0x11, 0x22, 0x33, 0x44,
+                        0x55, 0x66, 0x77, 0x88,
+                    ];
+                    let tx_len = tx_buf.len() as u32;
+
+                    let mut tx_msgs = [I3cMsg {
+                        buf: Some(&mut tx_buf[..]),
+                        actual_len: tx_len,
+                        num_xfer: 0,
+                        flags: I3C_MSG_WRITE | I3C_MSG_STOP,
+                        hdr_mode: 0,
+                        hdr_cmd_mode: 0,
+                    }];
+                    let _ = ctrl.hw.priv_xfer(&mut ctrl.config, known_pid, &mut tx_msgs);
+                    writeln!(uart, "[MASTER ==> TARGET]  MASTER WRITE: {:02x?}", tx_buf).unwrap();
                     writeln!(uart, "\r").unwrap();
                 }
                 IbiWork::TargetDaAssignment => {
@@ -154,7 +185,7 @@ pub fn test_i3c_target(uart: &mut UartController<'_>) {
         });
     }
 
-    pinctrl::Pinctrl::apply_pinctrl_group(pinctrl::PINCTRL_I3C2);
+    pinctrl::Pinctrl::apply_pinctrl_group(pinctrl::PINCTRL_HVI3C2);
     let hw = Ast1060I3c::<ast1060_pac::I3c2, UartLogger>::new(UartLogger::new(&mut dbg_uart));
 
     let mut ctrl = I3cController {

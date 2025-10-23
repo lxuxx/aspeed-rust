@@ -1402,11 +1402,6 @@ impl<I3C: Instance, L: Logger> HardwareInterface for Ast1060I3c<I3C, L> {
             w.response_buffer_threshold_value()
                 .bits(u8::try_from(xfer.cmds.len().saturating_sub(1)).unwrap_or(0))
         });
-        i3c_debug!(
-            self.logger,
-            "value of i3cd01c: {:#x}",
-            self.i3c.i3cd01c().read().bits()
-        );
 
         for cmd in xfer.cmds.iter() {
             i3c_debug!(
@@ -1908,7 +1903,6 @@ impl<I3C: Instance, L: Logger> HardwareInterface for Ast1060I3c<I3C, L> {
     }
 
     fn handle_ibis(&mut self, config: &mut I3cConfig) {
-        i3c_debug!(self.logger, "handle_ibis");
         let nibis = self.i3c.i3cd04c().read().ibistatuscnt().bits();
 
         i3c_debug!(self.logger, "Number of IBIs: {}", nibis);
@@ -1978,16 +1972,13 @@ impl<I3C: Instance, L: Logger> HardwareInterface for Ast1060I3c<I3C, L> {
                 self.target_handle_ccc_update(config);
             }
         } else {
-            i3c_debug!(self.logger, "Primary controller interrupt");
             if (status & (INTR_RESP_READY_STAT | INTR_TRANSFER_ERR_STAT | INTR_TRANSFER_ABORT_STAT))
                 != 0
             {
-                i3c_debug!(self.logger, "Transfer complete/err/abort");
                 self.end_xfer(config);
             }
 
             if (status & INTR_IBI_THLD_STAT) != 0 {
-                i3c_debug!(self.logger, "IBI threshold reached");
                 self.handle_ibis(config);
             }
         }
