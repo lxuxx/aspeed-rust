@@ -112,8 +112,8 @@ pub fn test_i2c_master(uart: &mut UartController<'_>) {
         .smbus_alert(false)
         .speed(I2cSpeed::Standard)
         .build();
-    let mut i2c1: I2cController<
-        Ast1060I2c<ast1060_pac::I2c1, DummyI2CTarget, UartLogger>,
+    let mut i2c2: I2cController<
+        Ast1060I2c<ast1060_pac::I2c2, DummyI2CTarget, UartLogger>,
         NoOpLogger,
     > = I2cController {
         hardware: Ast1060I2c::new(UartLogger::new(&mut dbg_uart)),
@@ -121,13 +121,14 @@ pub fn test_i2c_master(uart: &mut UartController<'_>) {
         logger: NoOpLogger {},
     };
 
-    pinctrl::Pinctrl::apply_pinctrl_group(pinctrl::PINCTRL_I2C1);
-    i2c1.hardware.init(&mut i2c1.config);
+    pinctrl::Pinctrl::apply_pinctrl_group(pinctrl::PINCTRL_I2C2);
+    i2c2.hardware.init(&mut i2c2.config);
 
-    let addr = 0x2e; //device ADT7490
+    let addr = 0x42; //device ADT7490
+    let buf1 = [0x4e, 0x81, 0x82, 0x83, 0x84];
     let mut buf = [0x4e];
     if true {
-        match i2c1.hardware.write(addr, &buf) {
+        match i2c2.hardware.write(addr, &buf1) {
             Ok(val) => {
                 writeln!(uart, "i2c write ok: {val:?}\r").unwrap();
             }
@@ -135,7 +136,15 @@ pub fn test_i2c_master(uart: &mut UartController<'_>) {
                 writeln!(uart, "i2c write err: {e:?}\r").unwrap();
             }
         }
-        match i2c1.hardware.read(addr, &mut buf) {
+        match i2c2.hardware.write(addr, &buf) {
+            Ok(val) => {
+                writeln!(uart, "i2c write ok: {val:?}\r").unwrap();
+            }
+            Err(e) => {
+                writeln!(uart, "i2c write err: {e:?}\r").unwrap();
+            }
+        }
+        match i2c2.hardware.read(addr, &mut buf) {
             Ok(val) => {
                 writeln!(uart, "i2c read ok: {val:?}\r").unwrap();
             }
@@ -144,7 +153,7 @@ pub fn test_i2c_master(uart: &mut UartController<'_>) {
             }
         }
         writeln!(uart, "after read data {:#x}, expected: 0x81\r\n", buf[0]).unwrap();
-    } else {
+    } else {/*
         let reg_addr = [0x82, 0x4e, 0x4f, 0x45, 0x3d];
         let reg_val = [0x0, 0x81, 0x7f, 0xff, 0x0];
         let mut buf = [0x0];
@@ -208,7 +217,7 @@ pub fn test_i2c_master(uart: &mut UartController<'_>) {
                 buf[0], buf2[1]
             )
             .unwrap();
-        }
+        }*/
     }
 }
 
