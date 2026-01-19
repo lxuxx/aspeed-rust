@@ -26,7 +26,7 @@ fn test_otp_read_conf<L: Logger>(
             for (i, each) in data.iter().enumerate() {
                 writeln!(
                     uart,
-                    "read OTPCFG{:#x} ok: {:#x}\r",
+                    "read OTPCFG{:#x} ok: {:#x} (PASS)\r",
                     conf_reg + u32::try_from(i).unwrap(),
                     each
                 )
@@ -34,7 +34,7 @@ fn test_otp_read_conf<L: Logger>(
             }
         }
         Err(e) => {
-            writeln!(uart, "read OTPCFG{conf_reg:#x} err: {e:?}\r").unwrap();
+            writeln!(uart, "read OTPCFG{conf_reg:#x} err: {e:?} (FAIL)\r").unwrap();
         }
     }
 }
@@ -153,12 +153,12 @@ fn test_otp_write_conf_b<L: Logger>(
         Ok(()) => {
             writeln!(
                 uart,
-                "program OTPCFG{otp_addr:#x}[{otp_bit_offset:#x}] successfully!\r",
+                "program OTPCFG{otp_addr:#x}[{otp_bit_offset:#x}] successfully! (PASS)\r",
             )
             .unwrap();
         }
         Err(e) => {
-            writeln!(uart, "program OTPCFG{otp_addr:#x} err: {e:?}\r").unwrap();
+            writeln!(uart, "program OTPCFG{otp_addr:#x} err: {e:?} (FAIL)\r").unwrap();
         }
     }
 }
@@ -172,10 +172,10 @@ fn test_otp_write_conf_d<L: Logger>(
 
     match otp.write_region(AspeedOtpRegion::Configuration, offset as usize, &data) {
         Ok(()) => {
-            writeln!(uart, "write OTPCONF{offset:#x} success\r").unwrap();
+            writeln!(uart, "write OTPCONF{offset:#x} success (PASS)\r").unwrap();
         }
         Err(e) => {
-            writeln!(uart, "write OTPCONF{offset:#x} err: {e:?}\r").unwrap();
+            writeln!(uart, "write OTPCONF{offset:#x} err: {e:?} (FAIL)\r").unwrap();
         }
     }
 }
@@ -283,10 +283,10 @@ fn test_otp_write_strap_b<L: Logger>(
     }
     match otp.otp_prog_dc_b(1, prog_addr, offset) {
         Ok(()) => {
-            writeln!(uart, "program OTPSTRAP[{offset:#x}] successfully!\r").unwrap();
+            writeln!(uart, "program OTPSTRAP[{offset:#x}] successfully! (PASS)\r").unwrap();
         }
         Err(e) => {
-            writeln!(uart, "program OTPSTRAP err: {e:?}\r").unwrap();
+            writeln!(uart, "program OTPSTRAP err: {e:?} (FAIL)\r").unwrap();
         }
     }
 }
@@ -300,10 +300,10 @@ fn test_otp_write_strap_d<L: Logger>(
     writeln!(uart, "OTPSTRAP start_bit {start_bit:}, strap = {strap:?}\r",).unwrap();
     match otp.write_region(AspeedOtpRegion::Strap, start_bit, strap) {
         Ok(()) => {
-            writeln!(uart, "program OTPSTRAP dword success\r").unwrap();
+            writeln!(uart, "program OTPSTRAP dword success (PASS)\r").unwrap();
         }
         Err(e) => {
-            writeln!(uart, "program OTPSTRAP dword err: {e:?}\r").unwrap();
+            writeln!(uart, "program OTPSTRAP dword err: {e:?} (FAIL)\r").unwrap();
         }
     }
 }
@@ -355,17 +355,17 @@ fn test_otp_read_strap<L: Logger>(
             }
         }
     } else {
-        writeln!(uart, "read otp strap fail!\r").unwrap();
+        writeln!(uart, "read otp strap fail! (FAIL)\r").unwrap();
     }
 
     // trait API
     let mut buffer: [u32; 2] = [0, 0];
     match otp.read_region(AspeedOtpRegion::Strap, 0, &mut buffer) {
         Ok(()) => {
-            writeln!(uart, "read OTPSTRAP {buffer:?}\r").unwrap();
+            writeln!(uart, "read OTPSTRAP {buffer:?} (PASS)\r").unwrap();
         }
         Err(e) => {
-            writeln!(uart, "read OTPSTRAP err: {e:?}\r").unwrap();
+            writeln!(uart, "read OTPSTRAP err: {e:?} (FAIL)\r").unwrap();
         }
     }
 }
@@ -440,14 +440,14 @@ fn test_otp_write_data_b<L: Logger>(
         Ok(()) => {
             writeln!(
                 uart,
-                "program OTPDATA{otp_addr:#x}[{bit_offset:#x}] successfully!\r",
+                "program OTPDATA{otp_addr:#x}[{bit_offset:#x}] successfully (PASS)!\r",
             )
             .unwrap();
         }
         Err(e) => {
             writeln!(
                 uart,
-                "program OTPDATA{otp_addr:#x}[{bit_offset:#x}] err: {e:?}\r",
+                "program OTPDATA{otp_addr:#x}[{bit_offset:#x}] err: {e:?} (FAIL)\r",
             )
             .unwrap();
         }
@@ -462,10 +462,10 @@ fn test_otp_write_data_d<L: Logger>(
 ) {
     match otp.write_region(AspeedOtpRegion::Data, otp_addr as usize, data) {
         Ok(()) => {
-            writeln!(uart, "write OTPDATA{otp_addr:#x} success\r").unwrap();
+            writeln!(uart, "write OTPDATA{otp_addr:#x} success (PASS)\r").unwrap();
         }
         Err(e) => {
-            writeln!(uart, "write OTPDATA{otp_addr:#x} err: {e:?}\r").unwrap();
+            writeln!(uart, "write OTPDATA{otp_addr:#x} err: {e:?} (FAIL)\r").unwrap();
         }
     }
 }
@@ -483,7 +483,7 @@ fn test_otp_read_data<L: Logger>(
             for (i, each) in data.iter().enumerate() {
                 writeln!(
                     uart,
-                    "read OTPDATA{:#x} ok: {:#x}\r",
+                    "read OTPDATA{:#x} ok: {:#x} (PASS)\r",
                     conf_reg + u32::try_from(i).unwrap(),
                     each
                 )
@@ -491,7 +491,7 @@ fn test_otp_read_data<L: Logger>(
             }
         }
         Err(e) => {
-            writeln!(uart, "read OTPDATA{conf_reg:#x} err: {e:?}\r").unwrap();
+            writeln!(uart, "read OTPDATA{conf_reg:#x} err: {e:?} (FAIL)\r").unwrap();
         }
     }
 }
