@@ -1,5 +1,3 @@
-// Licensed under the Apache-2.0 license
-
 #![cfg_attr(not(test), no_std)]
 pub mod astdebug;
 pub mod common;
@@ -11,6 +9,7 @@ pub mod hash_owned;
 pub mod hmac;
 pub mod i2c;
 pub mod i3c;
+
 pub mod pinctrl;
 pub mod rsa;
 pub mod spi;

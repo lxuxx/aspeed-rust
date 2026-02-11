@@ -1,20 +1,25 @@
 // Licensed under the Apache-2.0 license
 
-use crate::common::{DummyDelay, NoOpLogger, UartLogger};
-use crate::i3c::ast1060_i3c::HardwareInterface;
-use crate::i3c::ast1060_i3c::I3cMsg;
-use crate::i3c::ast1060_i3c::{Ast1060I3c, I3C_MSG_READ, I3C_MSG_STOP, I3C_MSG_WRITE};
-use crate::i3c::i3c_config::I3cConfig;
-use crate::i3c::i3c_config::I3cTargetConfig;
-use crate::i3c::i3c_controller::I3cController;
-use crate::i3c::ibi_workq::{i3c_ibi_workq_consumer, IbiWork};
+use crate::common::{DummyDelay, UartLogger};
+use crate::i3c::hardware::Ast1060I3c;
+use crate::i3c::config::I3cConfig;
+use crate::i3c::config::I3cTargetConfig;
+use crate::i3c::constants::I3C_MSG_READ;
+use crate::i3c::constants::I3C_MSG_STOP;
+use crate::i3c::constants::I3C_MSG_WRITE;
+use crate::i3c::controller::I3cController;
+use crate::i3c::hardware::HardwareCore;
+use crate::i3c::hardware::HardwareTransfer;
+use crate::i3c::hardware::HardwareTarget;
+use crate::i3c::ibi::{i3c_ibi_workq_consumer, IbiWork};
+use proposed_traits::i3c_master::I3c;
+use crate::i3c::types::I3cMsg;
 use crate::pinctrl;
 use crate::uart::{self, Config, UartController};
 use ast1060_pac::Peripherals;
 use core::ptr::read_volatile;
 use embedded_hal::delay::DelayNs;
 use embedded_io::Write;
-use proposed_traits::i3c_master::I3c;
 // I3cTarget
 use proposed_traits::i3c_target::{DynamicAddressable, IBICapable};
 
@@ -38,6 +43,8 @@ pub fn dump_i3c_controller_registers(uart: &mut UartController<'_>, base: u32) {
     }
 }
 
+
+
 #[allow(clippy::too_many_lines)]
 pub fn test_i3c_master(uart: &mut UartController<'_>) {
     let peripherals = unsafe { Peripherals::steal() };
@@ -58,33 +65,37 @@ pub fn test_i3c_master(uart: &mut UartController<'_>) {
     pinctrl::Pinctrl::apply_pinctrl_group(pinctrl::PINCTRL_HVI3C2);
     let hw = Ast1060I3c::<ast1060_pac::I3c2, UartLogger>::new(UartLogger::new(&mut dbg_uart));
 
-    let mut ctrl = I3cController {
-        hw,
-        config: I3cConfig::new(),
-        logger: NoOpLogger,
-    };
+    // Use Builder Pattern for Configuration
+    let mut config = I3cConfig::new()
+        .core_clk_hz(200_000_000)
+        .secondary(false)
+        .i2c_scl_hz(1_000_000)
+        .i3c_scl_hz(12_500_000)
+        .i3c_pp_scl_hi_period_ns(250)
+        .i3c_pp_scl_lo_period_ns(250)
+        .i3c_od_scl_hi_period_ns(0)
+        .i3c_od_scl_lo_period_ns(0)
+        .sda_tx_hold_ns(20);
 
-    {
-        let c = &mut ctrl.config;
-        c.init_runtime_fields();
-        c.is_secondary = false;
-        c.i2c_scl_hz = 1_000_000;
-        c.i3c_scl_hz = 12_500_000;
-        c.i3c_pp_scl_hi_period_ns = 250;
-        c.i3c_pp_scl_lo_period_ns = 250;
-        c.i3c_od_scl_hi_period_ns = 0;
-        c.i3c_od_scl_lo_period_ns = 0;
-        c.sda_tx_hold_ns = 20;
-    }
+    config.init_runtime_fields();
 
-    let mut ibi_cons = i3c_ibi_workq_consumer(ctrl.hw.bus_num() as usize);
+    // Validate Clock Configuration (Requested Pattern)
+    config.validate_clock().expect("Invalid clock configuration");
+
+    // Use Constructor that performs initialization
+    let mut ctrl = I3cController::new(hw, config);
+    ctrl.init_hardware();
+
+    let mut ibi_cons = i3c_ibi_workq_consumer(ctrl.hw.bus_num() as usize).unwrap();
     // let known_pid = 0x07ec_0503_1000u64;
     let known_pid = 0x07ec_a003_2000u64;
     let ctrl_dev_slot0 = 0;
-    ctrl.init();
+
+    // ctrl.init_hardware() is already called by I3cController::new()
 
     let dyn_addr = if let Some(da) = ctrl.config.addrbook.alloc_from(8) {
         ctrl.attach_i3c_dev(known_pid, da, ctrl_dev_slot0).unwrap();
+        ctrl.hw.set_ibi_mdb(0); // If MDB was implied by previous 4th arg
         ctrl.hw.ibi_enable(&mut ctrl.config, da).unwrap();
         writeln!(uart, "Pre-attached dev at slot 0, dyn addr {da}\r").unwrap();
         da
@@ -93,8 +104,6 @@ pub fn test_i3c_master(uart: &mut UartController<'_>) {
         return;
     };
 
-    // Dump I3C2 registers
-    // dump_i3c_controller_registers(uart, 0x7e7a_4000);
     writeln!(uart, "ctrl dev at slot 0, dyn addr {dyn_addr}\r").unwrap();
     let mut received_count = 0;
 
@@ -189,30 +198,30 @@ pub fn test_i3c_target(uart: &mut UartController<'_>) {
     pinctrl::Pinctrl::apply_pinctrl_group(pinctrl::PINCTRL_HVI3C2);
     let hw = Ast1060I3c::<ast1060_pac::I3c2, UartLogger>::new(UartLogger::new(&mut dbg_uart));
 
-    let mut ctrl = I3cController {
-        hw,
-        config: I3cConfig::new(),
-        logger: NoOpLogger,
-    };
+    let mut config = I3cConfig::new()
+        .core_clk_hz(200_000_000)
+        .secondary(true)
+        .i2c_scl_hz(1_000_000)
+        .i3c_scl_hz(12_500_000)
+        .i3c_pp_scl_hi_period_ns(36)
+        .i3c_pp_scl_lo_period_ns(36)
+        .i3c_od_scl_hi_period_ns(0)
+        .i3c_od_scl_lo_period_ns(0)
+        .sda_tx_hold_ns(0)
+        .dcr(0xcc)
+        .target_config(I3cTargetConfig::new(0, Some(0), 0xae));
 
-    {
-        let c = &mut ctrl.config;
-        c.init_runtime_fields();
-        // Configure as target
-        c.is_secondary = true;
-        c.i2c_scl_hz = 1_000_000;
-        c.i3c_scl_hz = 12_500_000;
-        c.i3c_pp_scl_hi_period_ns = 36;
-        c.i3c_pp_scl_lo_period_ns = 36;
-        c.i3c_od_scl_hi_period_ns = 0;
-        c.i3c_od_scl_lo_period_ns = 0;
-        c.sda_tx_hold_ns = 0;
-        // c.sda_tx_hold_ns = 20;
-        c.dcr = 0xcc;
-        c.target_config = Some(I3cTargetConfig::new(0, Some(0), 0xae));
-    }
-    let mut ibi_cons = i3c_ibi_workq_consumer(ctrl.hw.bus_num() as usize);
-    ctrl.init();
+    config.init_runtime_fields();
+
+    // Validate Clock Configuration
+    config.validate_clock().expect("Invalid clock configuration");
+
+    let mut ctrl = I3cController::new(hw, config);
+    ctrl.init_hardware();
+    let mut ibi_cons = i3c_ibi_workq_consumer(ctrl.hw.bus_num() as usize).unwrap();
+
+    // ctrl.init_hardware() is already called
+
     let dyn_addr = 8;
     let dev_idx = 0;
     let _ = ctrl.hw.attach_i3c_dev(dev_idx, dyn_addr);
