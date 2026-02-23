@@ -343,6 +343,7 @@ fn main() -> ! {
     let reset_id = ResetId::RstHACE;
     let _ = syscon.reset_deassert(&reset_id);
 
+    #[allow(unused_mut, unused_variables)]
     let mut hace_controller = HaceController::new(hace);
 
     run_hash_tests(&mut uart_controller, &mut hace_controller);
@@ -354,9 +355,11 @@ fn main() -> ! {
     // Enable RSA and ECC
     let _ = syscon.enable_clock(ClockId::ClkRSACLK as u8);
 
+    #[allow(unused_mut, unused_variables)]
     let mut ecdsa = AspeedEcdsa::new(&secure, delay.clone());
     run_ecdsa_tests(&mut uart_controller, &mut ecdsa);
 
+    #[allow(unused_mut, unused_variables)]
     let mut rsa = AspeedRsa::new(&secure, delay);
     run_rsa_tests(&mut uart_controller, &mut rsa);
     gpio_test::test_gpioa(&mut uart_controller);

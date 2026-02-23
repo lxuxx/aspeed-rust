@@ -366,23 +366,54 @@ macro_i3c!(I3c1, 1);
 macro_i3c!(I3c2, 2);
 macro_i3c!(I3c3, 3);
 
-// ISR Interrupt Handlers
-// TODO: Uncomment when replacing legacy driver
-#[no_mangle]
-pub extern "C" fn i3c() {
+/// I3C bus 0 interrupt handler - call this from your ISR
+#[inline]
+pub fn i3c_irq_handler() {
     dispatch_i3c_irq(0);
 }
-#[no_mangle]
-pub extern "C" fn i3c1() {
+
+/// I3C bus 1 interrupt handler - call this from your ISR
+#[inline]
+pub fn i3c1_irq_handler() {
     dispatch_i3c_irq(1);
 }
-#[no_mangle]
-pub extern "C" fn i3c2() {
+
+/// I3C bus 2 interrupt handler - call this from your ISR
+#[inline]
+pub fn i3c2_irq_handler() {
     dispatch_i3c_irq(2);
 }
+
+/// I3C bus 3 interrupt handler - call this from your ISR
+#[inline]
+pub fn i3c3_irq_handler() {
+    dispatch_i3c_irq(3);
+}
+
+// ISR exports - only when isr-handlers feature is enabled
+// For kernel integration, disable this feature and define ISRs in target code
+#[cfg(feature = "isr-handlers")]
+#[no_mangle]
+pub extern "C" fn i3c() {
+    i3c_irq_handler();
+}
+
+#[cfg(feature = "isr-handlers")]
+#[no_mangle]
+pub extern "C" fn i3c1() {
+    i3c1_irq_handler();
+}
+
+#[cfg(feature = "isr-handlers")]
+#[no_mangle]
+pub extern "C" fn i3c2() {
+    i3c2_irq_handler();
+}
+
+#[cfg(feature = "isr-handlers")]
 #[no_mangle]
 pub extern "C" fn i3c3() {
-    dispatch_i3c_irq(3);
+    i3c3_irq_handler();
 }
 
 pub struct Ast1060I3c<I3C: Instance, L: Logger> {
