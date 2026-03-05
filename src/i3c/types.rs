@@ -103,7 +103,7 @@ pub struct I3cCmd<'a> {
     pub ret: i32,
 }
 
-impl<'a> I3cCmd<'a> {
+impl I3cCmd<'_> {
     /// Create a new command with default values
     #[must_use]
     pub const fn new() -> Self {
@@ -141,7 +141,7 @@ pub struct I3cMsg<'a> {
     pub hdr_cmd_mode: u8,
 }
 
-impl<'a> I3cMsg<'a> {
+impl I3cMsg<'_> {
     /// Create a new message with default values
     #[must_use]
     pub const fn new() -> Self {

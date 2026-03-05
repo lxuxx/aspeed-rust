@@ -589,7 +589,7 @@ where
 }
 
 impl<I3C: Instance, L: Logger> Ast1060I3c<I3C, L> {
-    fn _toggle_scl_in(&mut self, count: u32) {
+    fn toggle_scl_in(&mut self, count: u32) {
         let bus = I3C::BUS_NUM;
         for _ in 0..count {
             modify_i3cg_reg1!(self, bus, |r, w| unsafe {
@@ -601,7 +601,7 @@ impl<I3C: Instance, L: Logger> Ast1060I3c<I3C, L> {
         }
     }
 
-    fn _gen_internal_stop(&mut self) {
+    fn gen_internal_stop(&mut self) {
         let bus = I3C::BUS_NUM;
         modify_i3cg_reg1!(self, bus, |r, w| unsafe {
             w.bits(r.bits() & !I3CG_REG1_SCL_IN_SW_MODE_VAL)
@@ -617,7 +617,7 @@ impl<I3C: Instance, L: Logger> Ast1060I3c<I3C, L> {
         });
     }
 
-    fn _enter_sw_mode(&mut self) {
+    fn enter_sw_mode(&mut self) {
         i3c_debug!(self.logger, "enter sw mode");
         let bus = I3C::BUS_NUM;
         let mut reg = read_i3cg_reg1!(self, bus);
@@ -627,7 +627,7 @@ impl<I3C: Instance, L: Logger> Ast1060I3c<I3C, L> {
         modify_i3cg_reg1!(self, bus, |_r, w| unsafe { w.bits(reg) });
     }
 
-    fn _exit_sw_mode(&mut self) {
+    fn exit_sw_mode(&mut self) {
         let bus = I3C::BUS_NUM;
         let mut reg = read_i3cg_reg1!(self, bus);
         reg &= !(I3CG_REG1_SCL_IN_SW_MODE_EN | I3CG_REG1_SDA_IN_SW_MODE_EN);
@@ -886,16 +886,16 @@ impl<I3C: Instance, L: Logger> HardwareCore for Ast1060I3c<I3C, L> {
         }
 
         if is_secondary {
-            self._enter_sw_mode();
+            self.enter_sw_mode();
         }
         self.i3c
             .i3cd000()
             .modify(|_, w| w.enbl_i3cctrl().clear_bit());
 
         if is_secondary {
-            self._toggle_scl_in(8);
-            self._gen_internal_stop();
-            self._exit_sw_mode();
+            self.toggle_scl_in(8);
+            self.gen_internal_stop();
+            self.exit_sw_mode();
         }
     }
 
@@ -904,7 +904,7 @@ impl<I3C: Instance, L: Logger> HardwareCore for Ast1060I3c<I3C, L> {
         if config.is_secondary {
             i3c_debug!(self.logger, "i3c enable as secondary");
             self.i3c.i3cd038().write(|w| unsafe { w.bits(0) });
-            self._enter_sw_mode();
+            self.enter_sw_mode();
             self.i3c.i3cd000().modify(|_, w| {
                 w.enbl_adaption_of_i2ci3cmode()
                     .clear_bit()
@@ -917,11 +917,11 @@ impl<I3C: Instance, L: Logger> HardwareCore for Ast1060I3c<I3C, L> {
             let wait_ns = u32::from(*wait_cnt) * config.core_period;
             let mut delay = DummyDelay {};
             delay.delay_ns(wait_ns * 100_u32);
-            self._toggle_scl_in(8);
+            self.toggle_scl_in(8);
             if self.i3c.i3cd000().read().enbl_i3cctrl().bit_is_set() {
-                self._gen_internal_stop();
+                self.gen_internal_stop();
             }
-            self._exit_sw_mode();
+            self.exit_sw_mode();
         } else {
             self.i3c.i3cd000().modify(|_, w| {
                 w.i3cbroadcast_addr_include()
@@ -1171,19 +1171,19 @@ impl<I3C: Instance, L: Logger> HardwareFifo for Ast1060I3c<I3C, L> {
 
 impl<I3C: Instance, L: Logger> HardwareRecovery for Ast1060I3c<I3C, L> {
     fn enter_sw_mode(&mut self) {
-        self._enter_sw_mode();
+        self.enter_sw_mode();
     }
 
     fn exit_sw_mode(&mut self) {
-        self._exit_sw_mode();
+        self.exit_sw_mode();
     }
 
     fn i3c_toggle_scl_in(&mut self, count: u32) {
-        self._toggle_scl_in(count);
+        self.toggle_scl_in(count);
     }
 
     fn gen_internal_stop(&mut self) {
-        self._gen_internal_stop();
+        self.gen_internal_stop();
     }
 
     fn even_parity(byte: u8) -> bool {

@@ -42,10 +42,9 @@ heapless = "0.8.0"
 nb = "1.1.0"
 paste = "1.0"
 critical-section = "1.2"
-cortex-m = { version = "0.7.5", features = ["critical-section-single-core"] }
 openprot-hal-blocking = { git="https://github.com/OpenPRoT/openprot" }
 zerocopy = { version = "0.8.25", features = ["derive"] }
-cortex-m = { version = "0.7.7" }
+cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
 cortex-m-rt = { version = "0.7.5", features = ["device"] }
 panic-halt = "1.0.0"
 

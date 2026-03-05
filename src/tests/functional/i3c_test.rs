@@ -14,8 +14,8 @@ use crate::i3c::hardware::HardwareTransfer;
 use crate::i3c::ibi::{i3c_ibi_workq_consumer, IbiWork};
 use crate::i3c::types::I3cMsg;
 use crate::pinctrl;
-use crate::uart::{self, Config, UartController};
-use ast1060_pac::Peripherals;
+use crate::uart_core::{UartConfig, UartController};
+
 use core::ptr::read_volatile;
 use embedded_hal::delay::DelayNs;
 use embedded_io::Write;
@@ -32,7 +32,7 @@ pub fn dump_i3c_controller_registers(uart: &mut UartController<'_>, base: u32) {
         writeln!(uart, "rust I3C reg dump:\r").unwrap();
         for i in 0..0xc0 {
             let v = read_volatile(reg_base.add(i));
-            if i % 4 == 0 {
+            if i.is_multiple_of(4) {
                 write!(uart, "[{:08x}]", base + u32::try_from(i).unwrap() * 4).unwrap();
             }
             write!(uart, " {v:08x}").unwrap();
@@ -45,20 +45,11 @@ pub fn dump_i3c_controller_registers(uart: &mut UartController<'_>, base: u32) {
 
 #[allow(clippy::too_many_lines)]
 pub fn test_i3c_master(uart: &mut UartController<'_>) {
-    let peripherals = unsafe { Peripherals::steal() };
-    let mut delay = DummyDelay {};
-    let mut dbg_uart = UartController::new(peripherals.uart, &mut delay);
+    let uart_regs = unsafe { &*ast1060_pac::Uart::ptr() };
+    let mut dbg_uart = UartController::new(uart_regs);
 
     writeln!(uart, "\r\n####### I3C master test #######\r\n").unwrap();
-    unsafe {
-        dbg_uart.init(&Config {
-            baud_rate: 115_200,
-            word_length: uart::WordLength::Eight as u8,
-            parity: uart::Parity::None,
-            stop_bits: uart::StopBits::One,
-            clock: 24_000_000,
-        });
-    }
+    dbg_uart.init(&UartConfig::default()).unwrap();
 
     pinctrl::Pinctrl::apply_pinctrl_group(pinctrl::PINCTRL_HVI3C2);
     let hw = Ast1060I3c::<ast1060_pac::I3c2, UartLogger>::new(UartLogger::new(&mut dbg_uart));
@@ -180,20 +171,11 @@ pub fn test_i3c_master(uart: &mut UartController<'_>) {
 }
 
 pub fn test_i3c_target(uart: &mut UartController<'_>) {
-    let peripherals = unsafe { Peripherals::steal() };
-    let mut delay = DummyDelay {};
-    let mut dbg_uart = UartController::new(peripherals.uart, &mut delay);
+    let uart_regs = unsafe { &*ast1060_pac::Uart::ptr() };
+    let mut dbg_uart = UartController::new(uart_regs);
 
     writeln!(uart, "\r\n####### I3C target test #######\r\n").unwrap();
-    unsafe {
-        dbg_uart.init(&Config {
-            baud_rate: 115_200,
-            word_length: uart::WordLength::Eight as u8,
-            parity: uart::Parity::None,
-            stop_bits: uart::StopBits::One,
-            clock: 24_000_000,
-        });
-    }
+    dbg_uart.init(&UartConfig::default()).unwrap();
 
     pinctrl::Pinctrl::apply_pinctrl_group(pinctrl::PINCTRL_HVI3C2);
     let hw = Ast1060I3c::<ast1060_pac::I3c2, UartLogger>::new(UartLogger::new(&mut dbg_uart));

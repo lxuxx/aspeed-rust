@@ -156,11 +156,7 @@ impl<H: HardwareInterface> I2CCoreTarget for I3cController<H> {
 
     #[inline]
     fn on_address_match(&mut self, addr: u8) -> bool {
-        self.config
-            .target_config
-            .as_ref()
-            .and_then(|t| t.addr)
-            .map_or(false, |da| da == addr)
+        self.config.target_config.as_ref().and_then(|t| t.addr) == Some(addr)
     }
 
     #[inline]

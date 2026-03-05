@@ -12,10 +12,10 @@ use ast1060_pac::{Wdt, Wdt1};
 
 use aspeed_ddk::ecdsa::AspeedEcdsa;
 use aspeed_ddk::hace_controller::HaceController;
+use aspeed_ddk::i2c_core;
 use aspeed_ddk::rsa::AspeedRsa;
 use aspeed_ddk::spi;
 use aspeed_ddk::syscon::{ClockId, ResetId, SysCon};
-use aspeed_ddk::{i2c_core, spi};
 use fugit::MillisDurationU32 as MilliSeconds;
 
 use aspeed_ddk::tests::functional::ecdsa_test::run_ecdsa_tests;
