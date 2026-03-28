@@ -22,6 +22,7 @@ use aspeed_ddk::tests::functional::hash_test::run_hash_tests;
 use aspeed_ddk::tests::functional::hmac_test::run_hmac_tests;
 use aspeed_ddk::tests::functional::i2c_core_test::run_i2c_core_tests;
 use aspeed_ddk::tests::functional::i2c_master_slave_test::run_master_slave_tests;
+use aspeed_ddk::tests::functional::i2c_master_slave_test::{run_master_tests, run_slave_tests};
 use aspeed_ddk::tests::functional::i2c_test;
 use aspeed_ddk::tests::functional::rsa_test::run_rsa_tests;
 use aspeed_ddk::tests::functional::timer_test::run_timer_tests;
@@ -326,7 +327,7 @@ fn main() -> ! {
 
     writeln!(uart_controller, "\r\nHello, world!!\r\n").unwrap();
 
-    let delay = DummyDelay;
+    /*let delay = DummyDelay;
 
     let mut syscon = SysCon::new(delay.clone(), scu);
 
@@ -379,24 +380,30 @@ fn main() -> ! {
 
     let mut rsa = AspeedRsa::new(&secure, delay);
     run_rsa_tests(&mut uart_controller, &mut rsa);
-    gpio_test::test_gpioa(&mut uart_controller);
+    gpio_test::test_gpioa(&mut uart_controller);*/
 
-    i2c_test::test_i2c_master(&mut uart_controller);
-    #[cfg(feature = "i2c_target")]
-    i2c_test::test_i2c_slave(&mut uart_controller);
-
-    // Run i2c_core functional tests
-    run_i2c_core_tests(&mut uart_controller);
-    {
-        //I2C core test on real hardware
-        i2c_core::init_i2c_global();
-        //run_master_tests(&mut uart_controller);
+    if false {
+        // i2c driver test on real hardware
+        i2c_test::test_i2c_master(&mut uart_controller);
         #[cfg(feature = "i2c_target")]
-        run_slave_tests(&mut uart_controller);
+        i2c_test::test_i2c_slave(&mut uart_controller);
     }
 
-    // Run I2C master-slave hardware integration tests
-    run_master_slave_tests(&mut uart_controller);
+    // Run i2c_core functional tests
+    //run_i2c_core_tests(&mut uart_controller);
+    {
+        //I2C core test on real hardware 
+        i2c_core::init_i2c_global();
+        if true {
+            //i2c1 as master to read/write device ADT7490
+            run_master_tests(&mut uart_controller);
+        } else {
+            //i2c2 as slave at address 0x50
+            #[cfg(feature = "i2c_target")]
+            run_slave_tests(&mut uart_controller);
+        }
+        
+    }
 
     test_wdt(&mut uart_controller);
     run_timer_tests(&mut uart_controller);

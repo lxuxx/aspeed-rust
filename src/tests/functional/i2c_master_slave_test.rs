@@ -344,6 +344,20 @@ fn test_i2c_slave_write_read(uart: &mut UartController<'_>, results: &mut TestRe
             }
         };
 
+        // write to address 0x3d
+        let write_buf = [0x3D, 0xAB];
+
+        let _ = writeln!(uart, "  Writing to reg 0x3D...\r");
+
+        match i2c.write(SLAVE_ADDRESS, &write_buf) {
+            Ok(()) => {}
+            Err(e) => {
+                let _ = writeln!(uart, "  [FAIL] Write address: {e:?}\r");
+                results.fail();
+                return;
+            }
+        }
+
         // Read Device address (0x3D)
         let reg_addr = [0x3D];
         let mut read_buf = [0u8; 1];
