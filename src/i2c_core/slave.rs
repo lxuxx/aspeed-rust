@@ -5,8 +5,8 @@
 //! This module provides slave (target) mode functionality for the AST1060 I2C controllers.
 //! In slave mode, the controller responds to requests from an external I2C master.
 
-use crate::i2c_core::I2cXferMode;
-
+use crate::{i2c_core::I2cXferMode, uart_core::UartController};
+use embedded_io::Write;
 use super::{constants, controller::Ast1060I2c, error::I2cError};
 
 /// Hardware buffer size (32 bytes / 8 DWORDs)
@@ -52,6 +52,8 @@ pub enum SlaveEvent {
     DataReceived { len: usize },
     /// Data sent to master
     DataSent { len: usize },
+    /// data received and sent
+    DataReceivedSent { rx_len: usize, tx_len: usize },
     /// Stop condition received
     Stop,
 }
@@ -298,7 +300,7 @@ impl Ast1060I2c<'_> {
 
     /// Handle slave mode interrupt
     #[allow(clippy::too_many_lines)]
-    pub fn handle_slave_interrupt(&mut self) -> Option<SlaveEvent> {
+    pub fn handle_slave_interrupt(&mut self, uart: &mut UartController<'_>) -> Option<SlaveEvent> {
         let status = self.regs().i2cs24().read().bits();
 
         if status == 0 {
@@ -312,6 +314,7 @@ impl Ast1060I2c<'_> {
         }
 
         if (status & constants::AST_I2CS_PKT_DONE) != 0 {
+            let _ = writeln!(uart, "pkt irq\r");
             let mut cmd: u32 = constants::AST_I2CS_ACTIVE_ALL | constants::AST_I2CS_PKT_MODE_EN;
             unsafe {
                 self.regs()
@@ -323,6 +326,7 @@ impl Ast1060I2c<'_> {
                 || sts == constants::AST_I2CS_SLAVE_MATCH | constants::AST_I2CS_RX_DONE
             {
                 // S: Sw
+                let _ = writeln!(uart, "S: Sw\r");
                 return Some(SlaveEvent::WriteRequest);
             } else if sts == constants::AST_I2CS_SLAVE_MATCH | constants::AST_I2CS_WAIT_RX_DMA
                 || sts
@@ -331,6 +335,7 @@ impl Ast1060I2c<'_> {
                         | constants::AST_I2CS_WAIT_RX_DMA
             {
                 // S: Sw|D
+                let _ = writeln!(uart, "S: Sw|D\r");
                 cmd |= constants::AST_I2CS_RX_BUFF_EN;
                 unsafe {
                     self.regs().i2cs28().write(|w| w.bits(cmd));
@@ -338,6 +343,7 @@ impl Ast1060I2c<'_> {
                 return Some(SlaveEvent::WriteRequest);
             } else if sts == constants::AST_I2CS_SLAVE_MATCH | constants::AST_I2CS_STOP {
                 // S: Sw|P
+                let _ = writeln!(uart, "S: Sw|P\r");
                 cmd |= constants::AST_I2CS_RX_BUFF_EN;
                 unsafe {
                     self.regs().i2cs28().write(|w| w.bits(cmd));
@@ -369,6 +375,7 @@ impl Ast1060I2c<'_> {
                         | constants::AST_I2CS_STOP
             {
                 // S: (Sw)|D|(P)
+                let _ = writeln!(uart, "S: (Sw)|D|(P)\r");
                 return Some(SlaveEvent::DataReceived {
                     len: usize::from(
                         self.regs()
@@ -385,16 +392,20 @@ impl Ast1060I2c<'_> {
                         | constants::AST_I2CS_WAIT_TX_DMA
             {
                 // S: rx_done | wait_tx
-                return Some(SlaveEvent::DataSent {
-                    len: usize::from(self.regs().i2cc0c().read().tx_data_byte_count().bits() + 1),
+                let _ = writeln!(uart, "S: rx_done | wait_tx\r");
+                return Some(SlaveEvent::DataReceivedSent {
+                    rx_len: usize::from(self.regs().i2cc0c().read().actual_rxd_pool_buffer_size().bits()),
+                    tx_len: usize::from(self.regs().i2cc0c().read().tx_data_byte_count().bits() + 1),
                 });
             } else if sts == constants::AST_I2CS_SLAVE_MATCH | constants::AST_I2CS_WAIT_TX_DMA {
                 // S: Sw | wait_tx
+                let _ = writeln!(uart, "S: Sw | wait_tx\r");
                 return Some(SlaveEvent::DataSent {
                     len: usize::from(self.regs().i2cc0c().read().tx_data_byte_count().bits() + 1),
                 });
             } else if sts == constants::AST_I2CS_WAIT_TX_DMA {
                 // S: wait_tx
+                let _ = writeln!(uart, "S: wait_tx\r");
                 return Some(SlaveEvent::DataSent {
                     len: usize::from(self.regs().i2cc0c().read().tx_data_byte_count().bits() + 1),
                 });
@@ -402,6 +413,7 @@ impl Ast1060I2c<'_> {
                 || sts == constants::AST_I2CS_STOP
             {
                 // S: (TX_NAK)|P
+                let _ = writeln!(uart, "S: (TX_NAK)|P\r");
                 self.regs().i2cc0c().write(|w| unsafe {
                     w.rx_pool_buffer_size().bits(constants::I2C_BUF_SIZE - 1)
                 });
@@ -415,6 +427,7 @@ impl Ast1060I2c<'_> {
             }
         } else {
             //byte irq
+            let _ = writeln!(uart, "byte irq\r");
             let cmd: u32 = constants::AST_I2CS_ACTIVE_ALL;
 
             if status

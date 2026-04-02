@@ -394,7 +394,7 @@ fn main() -> ! {
     {
         //I2C core test on real hardware 
         i2c_core::init_i2c_global();
-        if true {
+        if false {
             //i2c1 as master to read/write device ADT7490
             run_master_tests(&mut uart_controller);
         } else {

@@ -482,7 +482,7 @@ fn slave_event_loop(uart: &mut UartController<'_>, slave: &mut Ast1060I2c<'_>) {
     let mut poll_count = 0u32;
 
     loop {
-        if let Some(event) = slave.handle_slave_interrupt() {
+        if let Some(event) = slave.handle_slave_interrupt(uart) {
             match event {
                 SlaveEvent::DataReceived { len } => {
                     let _ = writeln!(uart, "[SLAVE] Received {len} bytes\r");
@@ -501,6 +501,19 @@ fn slave_event_loop(uart: &mut UartController<'_>, slave: &mut Ast1060I2c<'_>) {
                 SlaveEvent::DataSent { len } => {
                     let _ = writeln!(uart, "[SLAVE] Sent {len} bytes\r");
                     let _ = writeln!(uart, "sending {:02X?}\r", &TEST_PATTERN_READ[..len]);
+                    let _ = slave.slave_write(&TEST_PATTERN_READ);
+                    transaction_count += 1;
+                }
+                SlaveEvent::DataReceivedSent { rx_len, tx_len } => {
+                    let _ = writeln!(
+                        uart,
+                        "[SLAVE] Received {rx_len} bytes, Sent {tx_len} bytes\r"
+                    );
+                    let mut buf = [0u8; 32];
+                    if let Ok(n) = slave.slave_read(&mut buf) {
+                        let _ = writeln!(uart, "  Data: {:02X?}\r", &buf[..n]);
+                    }
+                    let _ = writeln!(uart, "sending {:02X?}\r", &TEST_PATTERN_READ[..tx_len]);
                     let _ = slave.slave_write(&TEST_PATTERN_READ);
                     transaction_count += 1;
                 }
