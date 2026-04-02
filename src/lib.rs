@@ -11,11 +11,8 @@ pub mod hash_owned;
 pub mod hmac;
 pub mod i2c;
 pub mod i2c_core;
-<<<<<<< HEAD
 pub mod i3c;
-=======
 pub mod i2cmonitor;
->>>>>>> bddc34d (Add i2c filter driver and test.)
 pub mod pinctrl;
 pub mod rsa;
 pub mod spi;
