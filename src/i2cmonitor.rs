@@ -23,11 +23,13 @@ pub struct AstI2cThrData {
 }
 
 #[derive(Debug, Copy, Clone)]
+#[repr(C)]
 pub struct AstI2cFBitmap {
     pub element: [u32; AST_I2C_F_ELEMENT_SIZE],
 }
 
 #[derive(Debug, Copy, Clone)]
+#[repr(C)]
 pub struct AstI2cFMTbl {
     filter_mtbl: [AstI2cFBitmap; AST_I2C_F_REMAP_SIZE + 1],
 }
@@ -40,10 +42,16 @@ pub struct I2cMonitor<L: Logger> {
     i2cfilter_thr2: I2cFilterThr2,
     i2cfilter_thr3: I2cFilterThr3,
     // i2cfilter_thrs: [&'a I2cFilterThrRegBlock; AST_I2C_F_COUNT],
-    i2cfilter_tbl: [AstI2cFMTbl; AST_I2C_F_COUNT],
+    // i2cfilter_tbl: [AstI2cFMTbl; AST_I2C_F_COUNT],
     i2cfilter_data: [AstI2cThrData; AST_I2C_F_COUNT],
     logger: L,
 }
+
+static mut I2C_FILTER_TBL: [AstI2cFMTbl; AST_I2C_F_COUNT] = [AstI2cFMTbl {
+    filter_mtbl: [AstI2cFBitmap {
+        element: [0; AST_I2C_F_ELEMENT_SIZE],
+    }; AST_I2C_F_REMAP_SIZE + 1],
+}; AST_I2C_F_COUNT];
 
 impl<L: Logger> fmt::Debug for I2cMonitor<L> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -83,11 +91,11 @@ impl<L: Logger> I2cMonitor<L> {
             i2cfilter_thr1,
             i2cfilter_thr2,
             i2cfilter_thr3,
-            i2cfilter_tbl: [AstI2cFMTbl {
-                filter_mtbl: [AstI2cFBitmap {
-                    element: [0; AST_I2C_F_ELEMENT_SIZE],
-                }; AST_I2C_F_REMAP_SIZE + 1],
-            }; AST_I2C_F_COUNT],
+            // i2cfilter_tbl: [AstI2cFMTbl {
+            //     filter_mtbl: [AstI2cFBitmap {
+            //         element: [0; AST_I2C_F_ELEMENT_SIZE],
+            //     }; AST_I2C_F_REMAP_SIZE + 1],
+            // }; AST_I2C_F_COUNT],
             i2cfilter_data: [AstI2cThrData {
                 filter_en: false,
                 wlist_en: false,
@@ -355,7 +363,11 @@ impl<L: Logger> I2cMonitor<L> {
 
     //set white list buffer into device
     fn set_dev_white_list_tbl(&mut self, index: usize) {
-        let table_ptr = core::ptr::from_ref::<AstI2cFMTbl>(&self.i2cfilter_tbl[index]) as u32;
+        //let table_ptr = core::ptr::from_ref::<AstI2cFMTbl>(&self.i2cfilter_tbl[index]) as u32;
+        let table_ptr =unsafe {
+            core::ptr::from_ref(&I2C_FILTER_TBL[index]) as usize
+        };
+        let table_ptr = u32::try_from(table_ptr).unwrap();
         let thr = match index {
             0 => &*self.i2cfilter_thr0,
             1 => &*self.i2cfilter_thr1,
@@ -411,7 +423,10 @@ impl<L: Logger> I2cMonitor<L> {
         }
         //fill bitmap table (pass or block)
         for i in 0..AST_I2C_F_ELEMENT_SIZE {
-            self.i2cfilter_tbl[index].filter_mtbl[idx].element[i] = value;
+            // self.i2cfilter_tbl[index].filter_mtbl[idx].element[i] = value;
+            unsafe {
+                I2C_FILTER_TBL[index].filter_mtbl[idx].element[i] = value;
+            }
         }
         Ok(0)
     }
@@ -467,7 +482,10 @@ impl<L: Logger> I2cMonitor<L> {
         }
         //fill bitmap table (pass or block)
         for i in 0..AST_I2C_F_ELEMENT_SIZE {
-            self.i2cfilter_tbl[index].filter_mtbl[idx].element[i] = table.element[i];
+            // self.i2cfilter_tbl[index].filter_mtbl[idx].element[i] = table.element[i];
+            unsafe {
+                I2C_FILTER_TBL[index].filter_mtbl[idx].element[i] = table.element[i];
+            }
         }
         Ok(0)
     }
