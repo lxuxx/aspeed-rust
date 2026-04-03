@@ -407,9 +407,9 @@ fn main() -> ! {
 
     // Run I2C master-slave hardware integration tests
     run_master_slave_tests(&mut uart_controller);
-    
+
     // test with AST1060-AST2600 DC-SCM board
-    if false{
+    if false {
         {
             // use to release ast2600
             spim_test::test_spim0(&mut uart_controller);

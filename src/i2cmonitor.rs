@@ -80,7 +80,6 @@ impl<L: Logger> I2cMonitor<L> {
         i2cfilter_thr3: I2cFilterThr3,
         logger: L,
     ) -> Self {
-
         Self {
             i2cfilter_glb,
             i2cfilter_thr0,
@@ -202,16 +201,8 @@ impl<L: Logger> I2cMonitor<L> {
                 };
                 let int_sts = thr.i2cfilterthr18().read().bits();
                 if int_sts > 0 {
-                    let info_wp = thr
-                        .i2cfilterthr20()
-                        .read()
-                        .failwpt()
-                        .bits();
-                    let info_rp = thr
-                        .i2cfilterthr20()
-                        .read()
-                        .failrpt()
-                        .bits();
+                    let info_wp = thr.i2cfilterthr20().read().failwpt().bits();
+                    let info_rp = thr.i2cfilterthr20().read().failrpt().bits();
                     //calculate the information count
                     if info_wp > info_rp {
                         count = info_wp - info_rp;
@@ -225,9 +216,7 @@ impl<L: Logger> I2cMonitor<L> {
                         i2cf_debug!(self.logger, "fail log info: {value:#x}");
                     }
                     //clear status
-                    thr
-                        .i2cfilterthr18()
-                        .write(|w| unsafe { w.bits(int_sts) });
+                    thr.i2cfilterthr18().write(|w| unsafe { w.bits(int_sts) });
                 }
             }
         }
@@ -243,10 +232,8 @@ impl<L: Logger> I2cMonitor<L> {
             3 => &*self.i2cfilter_thr3,
             _ => unreachable!(),
         };
-        thr.i2cfilterthr04()
-            .write(|w| w.en().clear_bit());
-        thr.i2cfilterthr0c()
-            .write(|w| unsafe { w.bits(0x0) });
+        thr.i2cfilterthr04().write(|w| w.en().clear_bit());
+        thr.i2cfilterthr0c().write(|w| unsafe { w.bits(0x0) });
     }
 
     pub fn set_initial_timing(&mut self, index: usize, cfg_clock: u32) {
@@ -276,8 +263,7 @@ impl<L: Logger> I2cMonitor<L> {
             3 => &*self.i2cfilter_thr3,
             _ => unreachable!(),
         };
-        thr.i2cfilterthr18()
-            .write(|w| unsafe { w.bits(0x1) });
+        thr.i2cfilterthr18().write(|w| unsafe { w.bits(0x1) });
     }
     pub fn enable_local_interrupt(&mut self, index: usize) {
         let thr = match index {
@@ -304,26 +290,20 @@ impl<L: Logger> I2cMonitor<L> {
             3 => &*self.i2cfilter_thr3,
             _ => unreachable!(),
         };
-        thr
-            .i2cfilterthr40()
+        thr.i2cfilterthr40()
             .write(|w| unsafe { w.map0().bits(0x0) });
-        thr
-            .i2cfilterthr44()
+        thr.i2cfilterthr44()
             .write(|w| unsafe { w.map1().bits(0x0) });
-        thr
-            .i2cfilterthr48()
+        thr.i2cfilterthr48()
             .write(|w| unsafe { w.map2().bits(0x0) });
-        thr
-            .i2cfilterthr4c()
+        thr.i2cfilterthr4c()
             .write(|w| unsafe { w.map3().bits(0x0) });
         self.i2cfilter_data[index].filter_idx.fill(0);
     }
 
     //set white list buffer into device
     fn set_dev_white_list_tbl(&mut self, index: usize) {
-        let table_ptr =unsafe {
-            core::ptr::from_ref(&I2C_FILTER_TBL[index]) as usize
-        };
+        let table_ptr = unsafe { core::ptr::from_ref(&I2C_FILTER_TBL[index]) as usize };
         let table_ptr = u32::try_from(table_ptr).unwrap();
         let thr = match index {
             0 => &*self.i2cfilter_thr0,
@@ -332,8 +312,7 @@ impl<L: Logger> I2cMonitor<L> {
             3 => &*self.i2cfilter_thr3,
             _ => unreachable!(),
         };
-        thr
-            .i2cfilterthr08()
+        thr.i2cfilterthr08()
             .write(|w| unsafe { w.addr().bits(table_ptr) });
     }
     //clear white list table
@@ -345,9 +324,7 @@ impl<L: Logger> I2cMonitor<L> {
             3 => &*self.i2cfilter_thr3,
             _ => unreachable!(),
         };
-        thr
-            .i2cfilterthr08()
-            .write(|w| unsafe { w.addr().bits(0) });
+        thr.i2cfilterthr08().write(|w| unsafe { w.addr().bits(0) });
 
         let tbl_ptr = &mut unsafe { I2C_FILTER_TBL }[index];
         //clear bitmap table
@@ -473,8 +450,7 @@ impl<L: Logger> I2cMonitor<L> {
             3 => &*self.i2cfilter_thr3,
             _ => unreachable!(),
         };
-        thr.i2cfilterthr04()
-            .write(|w| w.en().bit(filter_en));
+        thr.i2cfilterthr04().write(|w| w.en().bit(filter_en));
         thr.i2cfilterthr0c()
             .write(|w| unsafe { w.cfg().bits(u32::from(wlist_en)) });
         Ok(0)
