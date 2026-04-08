@@ -148,6 +148,8 @@ pub const AST_I2CS_RX_DONE: u32 = 1 << 2;
 pub const AST_I2CS_TX_NAK: u32 = 1 << 1;
 /// Slave TX got ACK
 pub const AST_I2CS_TX_ACK: u32 = 1 << 0;
+/// Slave inactive timeout
+pub const AST_I2CS_INACTIVE_TO: u32 = 1 << 15;
 /// Slave packet mode done
 pub const AST_I2CS_PKT_DONE: u32 = 1 << 16;
 /// Slave packet mode error

@@ -168,11 +168,17 @@ impl Ast1060I2c<'_> {
 
     /// Enable slave mode interrupts
     fn enable_slave_interrupts(&mut self) {
-        let mask = constants::AST_I2CS_PKT_DONE
-            | constants::AST_I2CS_PKT_ERROR
-            | constants::AST_I2CS_RX_DONE
-            | constants::AST_I2CS_SLAVE_MATCH
-            | constants::AST_I2CS_STOP;
+        let mut mask = 0u32;
+        if self.xfer_mode == I2cXferMode::BufferMode {
+            mask = constants::AST_I2CS_PKT_DONE
+                | constants::AST_I2CS_INACTIVE_TO
+                | constants::AST_I2CM_ABNORMAL
+                | constants::AST_I2CM_NORMAL_STOP
+                | constants::AST_I2CM_RX_DONE
+                | constants::AST_I2CM_TX_ACK;
+        } else {
+            mask = constants::AST_I2CS_PKT_DONE | constants::AST_I2CS_INACTIVE_TO;
+        }
 
         unsafe {
             self.regs().i2cs20().write(|w| w.bits(mask));
@@ -183,6 +189,7 @@ impl Ast1060I2c<'_> {
     fn clear_slave_interrupts(&mut self) {
         unsafe {
             self.regs().i2cs24().write(|w| w.bits(0xFFFF_FFFF));
+            let _ = self.regs().i2cs24().read().bits();
         }
     }
 
