@@ -41,6 +41,8 @@ impl Ast1060I2c<'_> {
                 Ok(())
             }
             I2cXferMode::BufferMode => self.start_buffer_mode(addr, is_read, len),
+            // DMA mode transfers are initiated directly in master.rs (write_dma_mode / read_dma_mode)
+            I2cXferMode::DmaMode => Err(super::error::I2cError::Invalid),
         }
     }
 

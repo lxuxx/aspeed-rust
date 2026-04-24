@@ -45,6 +45,9 @@ pub const I2C_FAST_PLUS_MODE_HZ: u32 = 1_000_000;
 /// Buffer mode maximum size (32 bytes)
 pub const BUFFER_MODE_SIZE: usize = 32;
 
+/// DMA mode maximum transfer size (4096 bytes, hardware limit)
+pub const DMA_MODE_MAX_SIZE: usize = 4096;
+
 /// I2C buffer size register value
 /// Reference: `ast1060_i2c.rs:97`
 pub const I2C_BUF_SIZE: u8 = 0x20;

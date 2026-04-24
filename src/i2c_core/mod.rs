@@ -10,8 +10,8 @@
 //!
 //! - Multi-master support
 //! - Master and slave (target) mode
-//! - Buffer mode with 32-byte hardware FIFO
-//! - Byte-by-byte mode for simple transfers
+//! - **Buffer mode with 32-byte hardware FIFO**
+//! - **DMA mode with up to 4096-byte transfers** (requires non-cached SRAM buffer)
 //! - Clock stretching and bus recovery
 //! - `SMBus` alert support
 //! - Configurable speeds: Standard (100kHz), Fast (400kHz), Fast-plus (1MHz)

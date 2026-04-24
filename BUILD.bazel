@@ -29,6 +29,7 @@ rust_library(
     deps = [
         "@oot_crates_no_std__aspeed-ddk-0.1.0//:build_script_build",
         "@oot_crates_no_std__ast1060-pac-0.1.0//:ast1060_pac",
+        "@oot_crates_no_std__bitflags-2.11.0//:bitflags",
         "@oot_crates_no_std__cortex-m-0.7.7//:cortex_m",
         "@oot_crates_no_std__cortex-m-rt-0.7.5//:cortex_m_rt",
         "@oot_crates_no_std__critical-section-1.2.0//:critical_section",
@@ -42,7 +43,8 @@ rust_library(
         "@oot_crates_no_std__openprot-hal-blocking-0.1.0//:openprot_hal_blocking",
         "@oot_crates_no_std__panic-halt-1.0.0//:panic_halt",
         "@oot_crates_no_std__proposed-traits-0.1.0//:proposed_traits",
-        "@oot_crates_no_std__zerocopy-0.8.39//:zerocopy",
+        "@oot_crates_no_std__static_cell-2.1.1//:static_cell",
+        "@oot_crates_no_std__zerocopy-0.8.47//:zerocopy",
     ],
     proc_macro_deps = [
         "@oot_crates_no_std__paste-1.0.15//:paste",

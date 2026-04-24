@@ -88,6 +88,7 @@ impl App {
         }
     }
 
+    #[cfg(feature = "isr-handlers")]
     unsafe fn fmc_irq(&mut self) {
         log_uart!(&mut self.uart, "fmc_irq");
         let Some(fmc) = self.fmc_controller.as_mut() else {
@@ -122,6 +123,7 @@ impl App {
         }
     }
 
+    #[cfg(feature = "isr-handlers")]
     unsafe fn spi_irq(&mut self) {
         log_uart!(&mut self.uart, "spi_irq");
         let Some(spi) = self.spi_controller.as_mut() else {
@@ -238,11 +240,17 @@ pub fn init_spidmairq_app_once() {
 fn app_mut() -> &'static mut App {
     unsafe { APP_PTR.as_mut().expect("APP not initialized") }
 }
+#[cfg(feature = "isr-handlers")]
 #[no_mangle]
 pub extern "C" fn fmc() {
     unsafe { app_mut().fmc_irq() };
 }
 
+#[cfg(not(feature = "isr-handlers"))]
+/// Placeholder: ISR handler disabled (build with `isr-handlers` feature to enable)
+pub fn fmc_isr() {}
+
+#[cfg(feature = "isr-handlers")]
 #[no_mangle]
 pub extern "C" fn spi() {
     unsafe { app_mut().spi_irq() };
