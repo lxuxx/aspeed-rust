@@ -47,6 +47,7 @@
 //! - **Slave tests**: Start slave EVB first with `run_slave_tests()`,
 //!   then initiate transactions from external master
 
+use crate::common::DmaBuffer;
 use crate::i2c_core::{
     Ast1060I2c, ClockConfig, Controller, I2cConfig, I2cController, I2cSpeed, I2cXferMode,
     SlaveConfig, SlaveEvent,
@@ -451,6 +452,73 @@ unsafe fn run_slave_tests_inner(uart: &mut UartController<'_>) {
     };
 
     let mut slave = match Ast1060I2c::new(&controller, config) {
+        Ok(s) => s,
+        Err(e) => {
+            let _ = writeln!(uart, "[FAIL] Init error: {e:?}\r");
+            return;
+        }
+    };
+
+    let slave_cfg = match SlaveConfig::new(SLAVE_ADDRESS) {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            let _ = writeln!(uart, "[FAIL] Invalid slave config: {e:?}\r");
+            return;
+        }
+    };
+
+    if let Err(e) = slave.configure_slave(&slave_cfg) {
+        let _ = writeln!(uart, "[FAIL] Configure slave error: {e:?}\r");
+        return;
+    }
+
+    let _ = writeln!(
+        uart,
+        "[SLAVE] Configured at address 0x{SLAVE_ADDRESS:02X}\r"
+    );
+    let _ = writeln!(uart, "[SLAVE] Entering event loop...\n\r");
+
+    slave_event_loop(uart, &mut slave);
+
+    slave.disable_slave();
+    let _ = writeln!(uart, "[SLAVE] Test complete\r");
+}
+
+#[link_section = ".ram_nc"]
+static mut DMA_BUF: DmaBuffer<4096> = DmaBuffer::new();
+unsafe fn run_slave_tests_inner_dma(uart: &mut UartController<'_>) {
+    let peripherals = Peripherals::steal();
+
+    // Apply pin control for I2C2 (slave) - Note: uses I2C1 registers in PAC
+    // as there's only one I2C peripheral defined
+    pinctrl::Pinctrl::apply_pinctrl_group(pinctrl::PINCTRL_I2C2);
+
+    // Note: PAC only has i2c1/i2cbuff1 - for slave tests we'd need
+    // the actual I2C2 peripheral which may need different handling
+    let i2c_regs = &peripherals.i2c2;
+    let buff_regs = &peripherals.i2cbuff2;
+
+    let Some(controller_id) = Controller::new(I2C_SLAVE_CTRL_ID) else {
+        let _ = writeln!(uart, "[FAIL] Invalid controller ID\r");
+        return;
+    };
+
+    let controller = I2cController {
+        controller: controller_id,
+        registers: i2c_regs,
+        buff_registers: buff_regs,
+    };
+
+    let config = I2cConfig {
+        speed: I2cSpeed::Standard,
+        xfer_mode: I2cXferMode::DmaMode,
+        multi_master: false,
+        smbus_timeout: true,
+        smbus_alert: false,
+        clock_config: ClockConfig::ast1060_default(),
+    };
+    let dma_buf: &mut [u8] = unsafe { &mut DMA_BUF.buf };
+    let mut slave = match Ast1060I2c::new_with_dma(&controller, config, dma_buf) {
         Ok(s) => s,
         Err(e) => {
             let _ = writeln!(uart, "[FAIL] Init error: {e:?}\r");
