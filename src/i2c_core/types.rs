@@ -209,6 +209,9 @@ impl Default for I2cConfig {
     /// The application must pre-configure I2C global clocks (I2CG10)
     /// before creating an I2C driver instance. This default reads
     /// the actual clock values from hardware registers.
+    ///
+    /// For DMA mode, use [`I2cConfig`] directly and set `xfer_mode` to
+    /// [`I2cXferMode::DmaMode`], then pass a DMA buffer via [`I2cController::dma_buf`].
     fn default() -> Self {
         Self {
             xfer_mode: I2cXferMode::BufferMode,
@@ -249,6 +252,12 @@ pub enum I2cXferMode {
     ByteMode,
     /// Buffer mode (up to 32 bytes via hardware buffer)
     BufferMode,
+    /// DMA mode (up to 4096 bytes via system memory DMA)
+    ///
+    /// Requires a pre-allocated, cache-coherent DMA buffer passed to
+    /// [`Ast1060I2c::new_with_dma`]. The buffer must be placed in a
+    /// non-cached memory region (e.g. `#[link_section = ".ram_nc"]`).
+    DmaMode,
 }
 
 /// I2C bus speed

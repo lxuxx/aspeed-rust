@@ -17,6 +17,7 @@ edition = "2021"
 [features]
 default = []
 std = []
+arm = []  # Enable ARM-only binaries
 isr-handlers = []  # Export ISR handlers with #[no_mangle] - disable for kernel integration
 i2c_master = []
 i2c_target = []
@@ -44,4 +45,14 @@ openprot-hal-blocking = { git="https://github.com/OpenPRoT/openprot" }
 zerocopy = { version = "0.8.25", features = ["derive"] }
 critical-section = "1.2"
 cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
+
+[[bin]]
+name = "i2c_master_dma"
+path = "src/rx-tx-test/i2c_master_dma.rs"
+required-features = ["arm"]
+
+[[bin]]
+name = "i2c_slave_dma"
+path = "src/rx-tx-test/i2c_slave_dma.rs"
+required-features = ["arm"]
 

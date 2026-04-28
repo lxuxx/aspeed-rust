@@ -45,6 +45,9 @@ pub const I2C_FAST_PLUS_MODE_HZ: u32 = 1_000_000;
 /// Buffer mode maximum size (32 bytes)
 pub const BUFFER_MODE_SIZE: usize = 32;
 
+/// DMA mode maximum transfer size (4096 bytes, hardware limit)
+pub const DMA_MODE_MAX_SIZE: usize = 4096;
+
 /// I2C buffer size register value
 /// Reference: `ast1060_i2c.rs:97`
 pub const I2C_BUF_SIZE: u8 = 0x20;
@@ -134,6 +137,10 @@ pub const AST_I2CM_SMBUS_ALT: u32 = 1 << 12;
 pub const AST_I2CS_PKT_MODE_EN: u32 = 1 << 16;
 /// Active on all addresses
 pub const AST_I2CS_ACTIVE_ALL: u32 = 0x3 << 17;
+/// Enable slave RX DMA
+pub const AST_I2CS_RX_DMA_EN: u32 = 1 << 9;
+/// Enable slave TX DMA
+pub const AST_I2CS_TX_DMA_EN: u32 = 1 << 8;
 /// Enable slave RX buffer
 pub const AST_I2CS_RX_BUFF_EN: u32 = 1 << 7;
 /// Enable slave TX buffer

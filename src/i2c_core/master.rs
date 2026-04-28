@@ -39,6 +39,7 @@ impl Ast1060I2c<'_> {
         match self.xfer_mode {
             I2cXferMode::ByteMode => self.write_byte_mode(addr, bytes),
             I2cXferMode::BufferMode => self.write_buffer_mode(addr, bytes),
+            I2cXferMode::DmaMode => self.write_dma_mode(addr, bytes),
         }
     }
 
@@ -51,6 +52,7 @@ impl Ast1060I2c<'_> {
         match self.xfer_mode {
             I2cXferMode::ByteMode => self.read_byte_mode(addr, buffer),
             I2cXferMode::BufferMode => self.read_buffer_mode(addr, buffer),
+            I2cXferMode::DmaMode => self.read_dma_mode(addr, buffer),
         }
     }
 
@@ -398,6 +400,197 @@ impl Ast1060I2c<'_> {
         if status & constants::AST_I2CM_SCL_LOW_TO != 0 {
             self.clear_interrupts(status);
             return Err(I2cError::Timeout);
+        }
+
+        Ok(())
+    }
+
+    // =========================================================================
+    // DMA mode
+    //
+    // Uses system SRAM (non-cached, caller-allocated) as the I2C DMA buffer.
+    // The DMA engine can move up to 4096 bytes in a single START/STOP
+    // transaction.
+    //
+    // Register layout for DMA master TX:
+    //   i2cm1c: dmatx_buf_len_byte = (len-1), dmatx_buf_len_wr_enbl_for_cur_write_cmd = 1
+    //   i2cm30: sdramdmabuffer_base_addr = physical address of DMA buffer
+    // For DMA master RX:
+    //   i2cm1c: dmarx_buf_len_byte = (len-1), dmarx_buf_len_wr_enbl_for_cur_write_cmd = 1
+    //   i2cm34: sdramdmabuffer_base_addr1 = physical address of DMA buffer
+    //
+    // Reference: aspeed-rust/src/i2c/ast1060_i2c.rs aspeed_i2c_write/read DmaMode branch
+    // =========================================================================
+
+    /// Write in DMA mode (up to 4096 bytes in a single transaction)
+    ///
+    /// The DMA buffer supplied to [`Ast1060I2c::new_with_dma`] is used as the
+    /// staging area. For transfers larger than `DMA_MODE_MAX_SIZE` the data is
+    /// chunked into successive START-less continuation transactions (i.e. the bus
+    /// is NOT released between chunks).
+    fn write_dma_mode(&mut self, addr: u8, bytes: &[u8]) -> Result<(), I2cError> {
+        let total_len = bytes.len();
+        let mut offset = 0;
+
+        self.current_addr = addr;
+        #[allow(clippy::cast_possible_truncation)]
+        {
+            self.current_len = total_len as u32;
+        }
+        self.current_xfer_cnt = 0;
+
+        while offset < total_len {
+            let chunk_len = core::cmp::min(constants::DMA_MODE_MAX_SIZE, total_len - offset);
+            let chunk = &bytes[offset..offset + chunk_len];
+            let is_first = offset == 0;
+            let is_last = offset + chunk_len >= total_len;
+
+            // Copy chunk to DMA buffer (non-cached SRAM)
+            {
+                let dma_buf = self.dma_buf.as_deref_mut().ok_or(I2cError::Invalid)?;
+                if dma_buf.len() < chunk_len {
+                    return Err(I2cError::Invalid);
+                }
+                dma_buf[..chunk_len].copy_from_slice(chunk);
+            }
+
+            let phy_addr = {
+                let dma_buf = self.dma_buf.as_deref().ok_or(I2cError::Invalid)?;
+                dma_buf.as_ptr() as u32
+            };
+
+            // Set DMA TX length in i2cm1c (len - 1)
+            #[allow(clippy::cast_possible_truncation)]
+            self.regs().i2cm1c().write(|w| unsafe {
+                w.dmatx_buf_len_byte()
+                    .bits((chunk_len - 1) as u16)
+                    .dmatx_buf_len_wr_enbl_for_cur_write_cmd()
+                    .set_bit()
+            });
+
+            // Set DMA TX buffer base address in i2cm30
+            self.regs()
+                .i2cm30()
+                .write(|w| unsafe { w.sdramdmabuffer_base_addr().bits(phy_addr) });
+
+            self.clear_interrupts(0xffff_ffff);
+            self.completion = false;
+
+            // Build command
+            let mut cmd = constants::AST_I2CM_PKT_EN
+                | constants::AST_I2CM_TX_CMD
+                | constants::AST_I2CM_TX_DMA_EN;
+
+            if is_first {
+                cmd |= constants::ast_i2cm_pkt_addr(addr) | constants::AST_I2CM_START_CMD;
+            }
+            if is_last {
+                cmd |= constants::AST_I2CM_STOP_CMD;
+            }
+
+            self.regs().i2cm18().write(|w| unsafe { w.bits(cmd) });
+
+            self.wait_completion(constants::DEFAULT_TIMEOUT_US)?;
+
+            let status = self.regs().i2cm14().read().bits();
+            if status & constants::AST_I2CM_PKT_ERROR != 0 {
+                if status & constants::AST_I2CM_TX_NAK != 0 {
+                    return Err(I2cError::NoAcknowledge);
+                }
+                return Err(I2cError::Abnormal);
+            }
+
+            #[allow(clippy::cast_possible_truncation)]
+            {
+                self.current_xfer_cnt += chunk_len as u32;
+            }
+            offset += chunk_len;
+        }
+
+        Ok(())
+    }
+
+    /// Read in DMA mode (up to 4096 bytes in a single transaction)
+    fn read_dma_mode(&mut self, addr: u8, buffer: &mut [u8]) -> Result<(), I2cError> {
+        let total_len = buffer.len();
+        let mut offset = 0;
+
+        self.current_addr = addr;
+        #[allow(clippy::cast_possible_truncation)]
+        {
+            self.current_len = total_len as u32;
+        }
+        self.current_xfer_cnt = 0;
+
+        while offset < total_len {
+            let chunk_len = core::cmp::min(constants::DMA_MODE_MAX_SIZE, total_len - offset);
+            let is_first = offset == 0;
+            let is_last = offset + chunk_len >= total_len;
+
+            {
+                let dma_buf = self.dma_buf.as_deref().ok_or(I2cError::Invalid)?;
+                if dma_buf.len() < chunk_len {
+                    return Err(I2cError::Invalid);
+                }
+            }
+
+            let phy_addr = {
+                let dma_buf = self.dma_buf.as_deref().ok_or(I2cError::Invalid)?;
+                dma_buf.as_ptr() as u32
+            };
+
+            // Set DMA RX length in i2cm1c (len - 1)
+            #[allow(clippy::cast_possible_truncation)]
+            self.regs().i2cm1c().modify(|_, w| unsafe {
+                w.dmarx_buf_len_byte()
+                    .bits((chunk_len - 1) as u16)
+                    .dmarx_buf_len_wr_enbl_for_cur_write_cmd()
+                    .set_bit()
+            });
+
+            // Set DMA RX buffer base address in i2cm34
+            self.regs()
+                .i2cm34()
+                .modify(|_, w| unsafe { w.sdramdmabuffer_base_addr1().bits(phy_addr) });
+
+            self.clear_interrupts(0xffff_ffff);
+            self.completion = false;
+
+            // Build command
+            let mut cmd = constants::AST_I2CM_PKT_EN
+                | constants::AST_I2CM_RX_CMD
+                | constants::AST_I2CM_RX_DMA_EN;
+
+            if is_first {
+                cmd |= constants::ast_i2cm_pkt_addr(addr) | constants::AST_I2CM_START_CMD;
+            }
+            if is_last {
+                cmd |= constants::AST_I2CM_RX_CMD_LAST | constants::AST_I2CM_STOP_CMD;
+            }
+
+            self.regs().i2cm18().write(|w| unsafe { w.bits(cmd) });
+
+            self.wait_completion(constants::DEFAULT_TIMEOUT_US)?;
+
+            let status = self.regs().i2cm14().read().bits();
+            if status & constants::AST_I2CM_PKT_ERROR != 0 {
+                if status & constants::AST_I2CM_TX_NAK != 0 {
+                    return Err(I2cError::NoAcknowledge);
+                }
+                return Err(I2cError::Abnormal);
+            }
+
+            // Copy from DMA buffer into caller's buffer
+            {
+                let dma_buf = self.dma_buf.as_deref().ok_or(I2cError::Invalid)?;
+                buffer[offset..offset + chunk_len].copy_from_slice(&dma_buf[..chunk_len]);
+            }
+
+            #[allow(clippy::cast_possible_truncation)]
+            {
+                self.current_xfer_cnt += chunk_len as u32;
+            }
+            offset += chunk_len;
         }
 
         Ok(())

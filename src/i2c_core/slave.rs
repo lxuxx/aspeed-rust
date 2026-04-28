@@ -15,6 +15,12 @@ const BUFFER_SIZE: usize = 32;
 /// Maximum slave receive buffer size (hardware limitation)
 pub const SLAVE_BUFFER_SIZE: usize = 256;
 
+/// Slave RX DMA enable bit in slave command register (i2cs28 bit 9).
+///
+/// When set, the hardware writes received bytes into the DMA buffer pointed to
+/// by i2cs38/i2cs3c instead of the 32-byte FIFO. Supports up to 4096-byte transfers.
+const AST_I2CS_RX_DMA_EN: u32 = 1 << 9;
+
 /// Slave mode configuration
 #[derive(Debug, Clone, Copy)]
 pub struct SlaveConfig {
@@ -115,6 +121,56 @@ impl SlaveBuffer {
 }
 
 impl Ast1060I2c<'_> {
+    #[inline]
+    fn slave_rx_len(&self) -> usize {
+        if self.xfer_mode == I2cXferMode::DmaMode {
+            self.regs().i2cs4c().read().dmarx_actual_len_byte().bits() as usize
+        } else {
+            self.regs()
+                .i2cc0c()
+                .read()
+                .actual_rxd_pool_buffer_size()
+                .bits() as usize
+        }
+    }
+
+    /// Arm slave receive path based on transfer mode.
+    ///
+    /// This mirrors the old AST1060 driver behavior where packet-slave IRQ
+    /// branches re-arm either RX FIFO or RX DMA depending on `xfer_mode`.
+    fn arm_slave_receive(&mut self, cmd: &mut u32) {
+        if self.xfer_mode == I2cXferMode::DmaMode {
+            if let Some(dma_buf) = self.dma_buf.as_deref_mut() {
+                let dma_addr = dma_buf.as_mut_ptr() as u32;
+                let dma_len = u16::try_from(dma_buf.len().min(4096) - 1).unwrap_or(u16::MAX);
+                unsafe {
+                    self.regs().i2cs4c().write(|w| w.bits(0));
+                    self.regs().i2cs38().write(|w| w.bits(dma_addr));
+                    self.regs().i2cs3c().write(|w| w.bits(dma_addr));
+                    self.regs().i2cs2c().write(|w| {
+                        w.dmarx_buf_len_byte()
+                            .bits(dma_len)
+                            .dmarx_buf_len_wr_enbl_for_cur_cmd()
+                            .set_bit()
+                    });
+                }
+                *cmd |= AST_I2CS_RX_DMA_EN;
+            } else {
+                *cmd |= constants::AST_I2CS_RX_BUFF_EN;
+                self.regs().i2cc0c().write(|w| unsafe {
+                    w.rx_pool_buffer_size().bits(constants::I2C_BUF_SIZE - 1)
+                });
+            }
+        } else if self.xfer_mode == I2cXferMode::BufferMode {
+            *cmd |= constants::AST_I2CS_RX_BUFF_EN;
+            self.regs()
+                .i2cc0c()
+                .write(|w| unsafe { w.rx_pool_buffer_size().bits(constants::I2C_BUF_SIZE - 1) });
+        } else {
+            *cmd &= !constants::AST_I2CS_PKT_MODE_EN;
+        }
+    }
+
     /// Configure the controller for slave mode
     pub fn configure_slave(&mut self, config: &SlaveConfig) -> Result<(), I2cError> {
         // Ensure master mode is disabled first
@@ -155,6 +211,32 @@ impl Ast1060I2c<'_> {
             self.regs()
                 .i2cc0c()
                 .write(|w| unsafe { w.rx_pool_buffer_size().bits(constants::I2C_BUF_SIZE - 1) });
+        } else if self.xfer_mode == I2cXferMode::DmaMode {
+            if let Some(dma_buf) = self.dma_buf.as_deref_mut() {
+                // Arm slave DMA: point hardware at the non-cached buffer and enable RX_DMA.
+                // i2cs38/i2cs3c hold the physical DMA buffer address (same address in
+                // both registers — the hardware uses both for different address widths).
+                // i2cs2c sets the DMA receive length and enables the length register.
+                let dma_addr = dma_buf.as_mut_ptr() as u32;
+                let dma_len = u16::try_from(dma_buf.len().min(4096) - 1).unwrap_or(u16::MAX);
+                unsafe {
+                    self.regs().i2cs38().write(|w| w.bits(dma_addr));
+                    self.regs().i2cs3c().write(|w| w.bits(dma_addr));
+                    self.regs().i2cs2c().write(|w| {
+                        w.dmarx_buf_len_byte()
+                            .bits(dma_len)
+                            .dmarx_buf_len_wr_enbl_for_cur_cmd()
+                            .set_bit()
+                    });
+                }
+                cmd |= AST_I2CS_RX_DMA_EN;
+            } else {
+                // No DMA buffer provided — fall back to buffer mode.
+                cmd |= constants::AST_I2CS_RX_BUFF_EN;
+                self.regs().i2cc0c().write(|w| unsafe {
+                    w.rx_pool_buffer_size().bits(constants::I2C_BUF_SIZE - 1)
+                });
+            }
         } else {
             cmd &= !constants::AST_I2CS_PKT_MODE_EN;
         }
@@ -173,7 +255,7 @@ impl Ast1060I2c<'_> {
     /// Enable slave mode interrupts
     fn enable_slave_interrupts(&mut self) {
         let mut mask = constants::AST_I2CS_PKT_DONE | constants::AST_I2CS_INACTIVE_TO;
-        if self.xfer_mode == I2cXferMode::BufferMode {
+        if self.xfer_mode == I2cXferMode::BufferMode || self.xfer_mode == I2cXferMode::DmaMode {
             mask |= constants::AST_I2CM_ABNORMAL
                 | constants::AST_I2CM_NORMAL_STOP
                 | constants::AST_I2CM_RX_DONE
@@ -253,6 +335,42 @@ impl Ast1060I2c<'_> {
             }
 
             Ok(to_read)
+        } else if self.xfer_mode == I2cXferMode::DmaMode {
+            // DMA mode: the hardware has already DMA'd into `self.dma_buf`.
+            // Read actual received byte count from the DMA status register.
+            let hw_len = self.regs().i2cs4c().read().dmarx_actual_len_byte().bits() as usize;
+            let to_read = hw_len.min(buffer.len());
+
+            if let Some(dma_buf) = self.dma_buf.as_deref() {
+                let src_len = to_read.min(dma_buf.len());
+                buffer[..src_len].copy_from_slice(&dma_buf[..src_len]);
+            }
+
+            // Re-arm slave DMA for next receive
+            let mut cmd = constants::AST_I2CS_ACTIVE_ALL | constants::AST_I2CS_PKT_MODE_EN;
+            if let Some(dma_buf) = self.dma_buf.as_deref_mut() {
+                let dma_addr = dma_buf.as_mut_ptr() as u32;
+                let dma_len = u16::try_from(dma_buf.len().min(4096) - 1).unwrap_or(u16::MAX);
+                unsafe {
+                    self.regs().i2cs4c().write(|w| w.bits(0));
+                    self.regs().i2cs38().write(|w| w.bits(dma_addr));
+                    self.regs().i2cs3c().write(|w| w.bits(dma_addr));
+                    self.regs().i2cs2c().write(|w| {
+                        w.dmarx_buf_len_byte()
+                            .bits(dma_len)
+                            .dmarx_buf_len_wr_enbl_for_cur_cmd()
+                            .set_bit()
+                    });
+                }
+                cmd |= AST_I2CS_RX_DMA_EN;
+            } else {
+                cmd |= constants::AST_I2CS_RX_BUFF_EN;
+            }
+            unsafe {
+                self.regs().i2cs28().write(|w| w.bits(cmd));
+            }
+
+            Ok(to_read)
         } else {
             // byte mode
             buffer[0] = self.regs().i2cc08().read().rx_byte_buffer().bits();
@@ -289,6 +407,40 @@ impl Ast1060I2c<'_> {
             unsafe {
                 self.regs().i2cs28().write(|w| w.bits(cmd));
             }
+            Ok(to_write)
+        } else if self.xfer_mode == I2cXferMode::DmaMode {
+            // In DMA mode, copy data to DMA buffer and set TX length
+            let dma_buf = self.dma_buf.as_deref_mut().ok_or(I2cError::Invalid)?;
+
+            // Copy data to DMA buffer starting at offset 0
+            let to_write = data.len().min(dma_buf.len());
+            unsafe {
+                core::ptr::copy_nonoverlapping(data.as_ptr(), dma_buf.as_mut_ptr(), to_write);
+            }
+
+            // Clear TX status/offset register
+            unsafe {
+                self.regs().i2cs4c().write(|w| w.bits(0));
+            }
+
+            // Set TX length (len - 1) and enable write
+            let tx_len = u16::try_from(to_write - 1).map_err(|_| I2cError::Invalid)?;
+            unsafe {
+                self.regs().i2cs2c().modify(|_, w| {
+                    w.dmatx_buf_len_byte()
+                        .bits(tx_len)
+                        .dmatx_buf_len_wr_enbl_for_cur_cmd()
+                        .set_bit()
+                });
+            }
+
+            // Trigger slave transmit with TX DMA enabled
+            let mut cmd = constants::AST_I2CS_ACTIVE_ALL | constants::AST_I2CS_PKT_MODE_EN;
+            cmd |= constants::AST_I2CS_TX_DMA_EN;
+            unsafe {
+                self.regs().i2cs28().write(|w| w.bits(cmd));
+            }
+
             Ok(to_write)
         } else {
             // byte mode
@@ -340,14 +492,16 @@ impl Ast1060I2c<'_> {
                         | constants::AST_I2CS_WAIT_RX_DMA
             {
                 // S: Sw|D
-                cmd |= constants::AST_I2CS_RX_BUFF_EN;
+                self.arm_slave_receive(&mut cmd);
                 unsafe {
                     self.regs().i2cs28().write(|w| w.bits(cmd));
                 }
-                return Some(SlaveEvent::WriteRequest);
+                return Some(SlaveEvent::DataReceived {
+                    len: self.slave_rx_len(),
+                });
             } else if sts == constants::AST_I2CS_SLAVE_MATCH | constants::AST_I2CS_STOP {
                 // S: Sw|P
-                cmd |= constants::AST_I2CS_RX_BUFF_EN;
+                self.arm_slave_receive(&mut cmd);
                 unsafe {
                     self.regs().i2cs28().write(|w| w.bits(cmd));
                 }
@@ -379,13 +533,7 @@ impl Ast1060I2c<'_> {
             {
                 // S: (Sw)|D|(P)
                 return Some(SlaveEvent::DataReceived {
-                    len: usize::from(
-                        self.regs()
-                            .i2cc0c()
-                            .read()
-                            .actual_rxd_pool_buffer_size()
-                            .bits(),
-                    ),
+                    len: self.slave_rx_len(),
                 });
             } else if sts == constants::AST_I2CS_RX_DONE | constants::AST_I2CS_WAIT_TX_DMA
                 || sts
@@ -395,13 +543,7 @@ impl Ast1060I2c<'_> {
             {
                 // S: rx_done | wait_tx
                 return Some(SlaveEvent::DataReceivedAndSent {
-                    rx_len: usize::from(
-                        self.regs()
-                            .i2cc0c()
-                            .read()
-                            .actual_rxd_pool_buffer_size()
-                            .bits(),
-                    ),
+                    rx_len: self.slave_rx_len(),
                     tx_len: usize::from(
                         self.regs().i2cc0c().read().tx_data_byte_count().bits() + 1,
                     ),
@@ -420,11 +562,7 @@ impl Ast1060I2c<'_> {
                 || sts == constants::AST_I2CS_STOP
             {
                 // S: (TX_NAK)|P
-                self.regs().i2cc0c().write(|w| unsafe {
-                    w.rx_pool_buffer_size().bits(constants::I2C_BUF_SIZE - 1)
-                });
-
-                cmd |= constants::AST_I2CS_RX_BUFF_EN;
+                self.arm_slave_receive(&mut cmd);
                 unsafe {
                     self.regs().i2cs28().write(|w| w.bits(cmd));
                 }

@@ -30,6 +30,8 @@ pub struct Ast1060I2c<'a> {
     pub(crate) current_xfer_cnt: u32,
     /// Completion flag for synchronous operations
     pub(crate) completion: bool,
+    /// DMA buffer for DMA mode (non-cached SRAM, caller-owned)
+    pub(crate) dma_buf: Option<&'a mut [u8]>,
 }
 
 impl<'a> Ast1060I2c<'a> {
@@ -43,6 +45,7 @@ impl<'a> Ast1060I2c<'a> {
     /// - Interrupt enable
     ///
     /// Use [`from_initialized`] if hardware is already configured.
+    /// For DMA mode, set `controller.dma_buf` before calling; see [`I2cController`].
     pub fn new(controller: &'a I2cController<'a>, config: I2cConfig) -> Result<Self, I2cError> {
         let mut i2c = Self::from_initialized(controller, config);
         i2c.init_hardware(&config)?;
@@ -92,7 +95,74 @@ impl<'a> Ast1060I2c<'a> {
             current_len: 0,
             current_xfer_cnt: 0,
             completion: false,
+            dma_buf: None,
         }
+    }
+
+    /// Create I2C instance with DMA mode support.
+    ///
+    /// Like [`from_initialized`] but also provides a DMA buffer for use when
+    /// `xfer_mode == I2cXferMode::DmaMode`. The buffer must reside in
+    /// non-cached SRAM (e.g. `#[link_section = ".ram_nc"]`) so that the
+    /// DMA engine and CPU see the same data without cache maintenance.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use aspeed_ddk::i2c_core::*;
+    /// use aspeed_ddk::common::DmaBuffer;
+    ///
+    /// #[link_section = ".ram_nc"]
+    /// static mut DMA_BUF: DmaBuffer<4096> = DmaBuffer::new();
+    ///
+    /// let config = I2cConfig { xfer_mode: I2cXferMode::DmaMode, ..I2cConfig::with_static_clocks() };
+    /// let dma_buf: &mut [u8] = unsafe { &mut DMA_BUF.buf };
+    /// let mut i2c = Ast1060I2c::new_with_dma(&controller, config, dma_buf)?;
+    /// ```
+    pub fn new_with_dma(
+        controller: &'a I2cController<'a>,
+        config: I2cConfig,
+        dma_buf: &'a mut [u8],
+    ) -> Result<Self, I2cError> {
+        let mut i2c = Self::from_initialized(controller, config);
+        i2c.dma_buf = Some(dma_buf);
+        i2c.init_hardware(&config)?;
+        Ok(i2c)
+    }
+
+    /// Create I2C instance from pre-initialized hardware with DMA buffer (NO hardware init)
+    ///
+    /// Like [`from_initialized`] but attaches a DMA buffer for use when
+    /// `xfer_mode == I2cXferMode::DmaMode`. Use this per-operation after the
+    /// bus has already been initialized via [`new_with_dma`], to avoid the
+    /// overhead of re-running hardware initialization.
+    ///
+    /// The buffer must reside in non-cached SRAM (e.g. `#[link_section = ".ram_nc"]`).
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use aspeed_ddk::i2c_core::*;
+    /// use aspeed_ddk::common::DmaBuffer;
+    ///
+    /// #[link_section = ".ram_nc"]
+    /// static mut DMA_BUF: DmaBuffer<4096> = DmaBuffer::new();
+    ///
+    /// let config = I2cConfig { xfer_mode: I2cXferMode::DmaMode, ..I2cConfig::with_static_clocks() };
+    /// // Hardware was already initialized via new_with_dma() at startup.
+    /// let dma_buf: &mut [u8] = unsafe { &mut DMA_BUF.buf };
+    /// let mut i2c = Ast1060I2c::from_initialized_with_dma(&controller, config, dma_buf);
+    /// i2c.write(addr, data)?;
+    /// ```
+    #[must_use]
+    pub fn from_initialized_with_dma(
+        controller: &'a I2cController<'a>,
+        config: I2cConfig,
+        dma_buf: &'a mut [u8],
+    ) -> Self {
+        let mut i2c = Self::from_initialized(controller, config);
+        i2c.dma_buf = Some(dma_buf);
+        i2c
     }
 
     /// Get access to registers (visible to other modules)
