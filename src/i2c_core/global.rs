@@ -60,8 +60,8 @@ pub fn init_i2c_global() {
 
         // CRITICAL: Unlock SCU registers first!
         // AST chips have a protection register that must be unlocked
-        // Write magic value 0x1688A8A8 to SCU000 to unlock
-        scu.scu000().write(|w| w.bits(0x1688A8A8));
+        // Write magic value 0x1688_A8A8 to SCU000 to unlock
+        scu.scu000().write(|w| w.bits(0x1688_A8A8));
 
         // Enable I2C clock by clearing clock stop bit
         // SCU084 is Clock Stop Control Clear register for Group 0

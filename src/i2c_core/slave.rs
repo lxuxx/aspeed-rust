@@ -415,11 +415,7 @@ impl Ast1060I2c<'_> {
             // Copy data to DMA buffer starting at offset 0
             let to_write = data.len().min(dma_buf.len());
             unsafe {
-                core::ptr::copy_nonoverlapping(
-                    data.as_ptr(),
-                    dma_buf.as_mut_ptr(),
-                    to_write,
-                );
+                core::ptr::copy_nonoverlapping(data.as_ptr(), dma_buf.as_mut_ptr(), to_write);
             }
 
             // Clear TX status/offset register
